@@ -1,11 +1,10 @@
 
 # ArtBlock - Decentralized Art Curation & Investment Platform
 
-![Alt text](https://i.imgur.com/uTKEjrp.jpeg)
 
 
-## Overview  
-This project is our entry for the VIT CSI CodeFlix hackathon for Track 2. The **Digital Art Gallery Platform** bridges the gap between digital artists and curators by enabling the creation and management of professional virtual galleries. With an intuitive interface, curators can manage digital spaces while artists can showcase their work and discover opportunities to reach a broader audience.  
+
+The **Digital Art Gallery Platform** bridges the gap between digital artists and curators by enabling the creation and management of professional virtual galleries. With an intuitive interface, curators can manage digital spaces while artists can showcase their work and discover opportunities to reach a broader audience.  
 
 ```mermaid
 flowchart TD
