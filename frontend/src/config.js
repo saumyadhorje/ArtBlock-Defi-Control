@@ -1,0 +1,2 @@
+export const ARTBLOCK_NFT_ADDRESS = "0x093F00F1bcC727f95c31a0Bd75DB1C4819EB61B4";
+export const NETWORK_ID = "11155111"; // Sepolia network ID 
