@@ -139,6 +139,7 @@ const CreateNFTModal = ({ isOpen, onClose }) => {
 
       alert(`NFT minted successfully!\nToken ID: ${tokenId}\nPrice: ${priceInEth} ETH`);
       onClose();
+      window.location.reload();
 
     } catch (err) {
       console.error('Minting error:', err);

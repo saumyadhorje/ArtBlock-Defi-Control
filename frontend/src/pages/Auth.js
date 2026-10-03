@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { BrowserProvider } from 'ethers';
 import axiosInstance from '../utils/axios';
 import useWalletConnection from '../hooks/useWalletConnection';
+import { ensureHardhatNetwork } from '../utils/network';
 import { Wallet, Loader2, ArrowRight } from 'lucide-react';
 import gsap from 'gsap';
 
@@ -12,6 +13,7 @@ const LOCAL_STORAGE_KEYS = {
   USER: 'artblock_user',
   WALLET: 'artblock_wallet'
 };
+
 
 const setUserSession = (token, user) => {
   console.log('Setting user session:', { token, user });
@@ -211,6 +213,7 @@ const Auth = () => {
       }
 
       setLoading(true);
+      await ensureHardhatNetwork();
       const provider = new BrowserProvider(window.ethereum);
       await window.ethereum.request({ method: 'eth_requestAccounts' });
       const signer = await provider.getSigner();

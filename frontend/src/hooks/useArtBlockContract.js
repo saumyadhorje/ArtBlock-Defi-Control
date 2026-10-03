@@ -2,6 +2,7 @@ import { ethers } from 'ethers';
 import { useCallback } from 'react';
 import ArtBlockNFT from '../contracts/ArtBlockNFT.json';
 import { useWallet } from '../context/WalletContext';
+import { ensureHardhatNetwork } from '../utils/network';
 
 const useArtBlockContract = () => {
   const { provider, address } = useWallet();
@@ -12,6 +13,7 @@ const useArtBlockContract = () => {
         throw new Error('Wallet not connected');
       }
 
+      await ensureHardhatNetwork();
       const signer = await provider.getSigner();
       const contract = new ethers.Contract(
         process.env.REACT_APP_ARTBLOCK_CONTRACT_ADDRESS,

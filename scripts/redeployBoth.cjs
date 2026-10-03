@@ -31,11 +31,29 @@ async function main() {
   await setGalleryFactoryTx.wait();
   console.log("✅ GalleryFactory set in ArtBlockNFT");
 
-  console.log("\n✅ Deployment complete! New addresses:");
-  console.log("GalleryFactory:", GALLERY_FACTORY_ADDRESS);
-  console.log("ArtBlockNFT:", ARTBLOCK_ADDRESS);
-  console.log("\nDon't forget to update these addresses in your .env files!");
+  // 4. Create initial test gallery so there's always a valid gallery ready to use
+  console.log("\nCreating initial default gallery...");
+  const createTx = await galleryFactory.createGallery("Default Art Gallery", "Initial test gallery for minting NFTs");
+  const receipt = await createTx.wait();
+
+  let DEFAULT_GALLERY_ADDRESS = null;
+  for (const log of receipt.logs) {
+    try {
+      const parsed = galleryFactory.interface.parseLog(log);
+      if (parsed && parsed.name === "GalleryCreated") {
+        DEFAULT_GALLERY_ADDRESS = parsed.args.galleryAddress;
+        break;
+      }
+    } catch (e) {}
+  }
+
+  console.log("\n✅ Deployment complete! Addresses:");
+  console.log("GalleryFactory:       ", GALLERY_FACTORY_ADDRESS);
+  console.log("ArtBlockNFT:          ", ARTBLOCK_ADDRESS);
+  console.log("Valid Test Gallery:   ", DEFAULT_GALLERY_ADDRESS);
+  console.log("\nUse 'Valid Test Gallery' address when minting NFTs!");
 }
+
 
 main()
   .then(() => process.exit(0))

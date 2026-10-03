@@ -3,6 +3,7 @@ import { BrowserProvider, Contract, parseEther, formatEther } from 'ethers';
 import { uploadToIPFS } from '../utils/ipfs';
 import { contractABI } from '../constants/contractABI';
 import axiosInstance from '../utils/axios';
+import { ensureHardhatNetwork } from '../utils/network';
 
 const useNFTContract = () => {
   const [loading, setLoading] = useState(false);
@@ -16,9 +17,14 @@ const useNFTContract = () => {
     try {
       setLoading(true);
       setError(null);
+      await ensureHardhatNetwork();
 
-      const user = JSON.parse(localStorage.getItem('artblock_user'));
-      const artistAddress = user.walletAddress;
+
+      const provider = new BrowserProvider(window.ethereum);
+      const signer = await provider.getSigner();
+      const signerAddress = await signer.getAddress();
+      const user = JSON.parse(localStorage.getItem('artblock_user')) || {};
+      const artistAddress = signerAddress || user.walletAddress;
 
       // Upload to IPFS and create metadata
       const imageHash = await uploadToIPFS(artwork.image);
@@ -40,8 +46,6 @@ const useNFTContract = () => {
 
       const metadataHash = await uploadToIPFS(JSON.stringify(metadata));
 
-      const provider = new BrowserProvider(window.ethereum);
-      const signer = await provider.getSigner();
       const contractAddress = process.env.REACT_APP_ARTBLOCK_CONTRACT_ADDRESS;
       const contract = new Contract(
         contractAddress,
@@ -75,17 +79,24 @@ const useNFTContract = () => {
       const receipt = await tx.wait();
       console.log('Transaction receipt:', receipt);
 
-      // Find the ArtworkMinted event
-      const mintEvent = receipt.logs.find(
-        log => log.fragment && log.fragment.name === 'ArtworkMinted'
-      );
-
-      if (!mintEvent) {
-        throw new Error('Minting event not found in transaction receipt');
+      // Find and parse the ArtworkMinted event from receipt logs
+      let tokenId = null;
+      for (const log of receipt.logs) {
+        try {
+          const parsed = contract.interface.parseLog(log);
+          if (parsed && parsed.name === 'ArtworkMinted') {
+            tokenId = parsed.args.tokenId ?? parsed.args[0];
+            break;
+          }
+        } catch (e) {
+          // ignore non-matching logs
+        }
       }
 
-      // Extract tokenId from event
-      const tokenId = mintEvent.args[0];
+      if (tokenId === null || tokenId === undefined) {
+        throw new Error('Minting failed. Please ensure you are using a VALID Gallery Address created by a Curator.');
+      }
+
 
       // Store NFT in MongoDB with all required fields
       const nftData = {
@@ -98,7 +109,7 @@ const useNFTContract = () => {
         galleryAddress: galleryAddress.toLowerCase(),
         metadata,
         contractAddress: contractAddress.toLowerCase(),
-        network: 'linea-sepolia',
+        network: 'hardhat',
         isListed: true
       };
 
@@ -138,6 +149,10 @@ const useNFTContract = () => {
         console.log('Error fetching from backend:', error);
       }
 
+      if (window.ethereum) {
+        await ensureHardhatNetwork();
+      }
+
       // Then get from blockchain
       const provider = new BrowserProvider(window.ethereum);
       const contract = new Contract(
@@ -154,17 +169,22 @@ const useNFTContract = () => {
         try {
           const { tokenId, artist, ipfsHash, price } = event.args;
           
-          // Find matching backend data
+          // Find matching backend data using String comparison
           const backendNFT = backendNFTs.find(
-            nft => nft.tokenId === tokenId.toString()
+            nft => String(nft.tokenId) === String(tokenId)
           );
           
+          const hashToUse = backendNFT?.ipfsHash || ipfsHash;
+          const imageUrl = hashToUse?.startsWith('http') 
+            ? hashToUse 
+            : `https://gateway.pinata.cloud/ipfs/${hashToUse}`;
+
           return {
             tokenId: tokenId.toString(),
             artist,
-            ipfsHash,
+            ipfsHash: hashToUse,
             price: formatEther(price),
-            image: `https://ipfs.io/ipfs/${ipfsHash}`,
+            image: imageUrl,
             title: backendNFT?.title || `Artwork #${tokenId}`,
             description: backendNFT?.description || '',
             isListed: true,

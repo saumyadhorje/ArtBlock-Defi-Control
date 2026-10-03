@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { ensureHardhatNetwork } from '../utils/network';
 
 const useWalletConnection = () => {
   const navigate = useNavigate();
@@ -9,6 +10,10 @@ const useWalletConnection = () => {
     if (!window.ethereum) {
       return;
     }
+
+    ensureHardhatNetwork().catch((err) => {
+      console.warn('Network warning:', err.message);
+    });
 
     // Handle account changes
     const handleAccountsChanged = (accounts) => {

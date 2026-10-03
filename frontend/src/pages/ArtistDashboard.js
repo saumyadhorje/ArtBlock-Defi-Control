@@ -81,8 +81,22 @@ const ArtistDashboard = () => {
         }
         console.log('Current User:', user);
 
-        // Fetch NFTs from blockchain first
-        const nftsFromChain = await getArtistNFTs(user.walletAddress);
+        const activeWallet = window.ethereum?.selectedAddress || user.walletAddress;
+        // Fetch NFTs from blockchain for user's wallet address and active MetaMask address
+        const primaryNFTs = await getArtistNFTs(user.walletAddress);
+        let secondaryNFTs = [];
+        if (activeWallet && activeWallet.toLowerCase() !== user.walletAddress.toLowerCase()) {
+          secondaryNFTs = await getArtistNFTs(activeWallet);
+        }
+        
+        // Merge and deduplicate NFTs by tokenId
+        const nftsFromChainMap = new Map();
+        [...primaryNFTs, ...secondaryNFTs].forEach(nft => {
+          if (nft && nft.tokenId) {
+            nftsFromChainMap.set(nft.tokenId.toString(), nft);
+          }
+        });
+        const nftsFromChain = Array.from(nftsFromChainMap.values());
         console.log('NFTs from blockchain:', nftsFromChain);
 
         if (!mounted) return;
@@ -324,13 +338,14 @@ const ArtistDashboard = () => {
       });
       
       const formattedPrice = formatPrice(nft.price);
+      const imageUrl = nft.image || (nft.ipfsHash?.startsWith('http') ? nft.ipfsHash : `https://gateway.pinata.cloud/ipfs/${nft.ipfsHash}`);
       
       return {
         _id: nft.tokenId.toString(),
-        title: nft.title,
-        description: nft.description,
+        title: nft.title || `Artwork #${nft.tokenId}`,
+        description: nft.description || '',
         price: formattedPrice,
-        ipfsHash: nft.image,
+        ipfsHash: imageUrl,
         status: nft.isListed ? 'listed' : 'sold',
         analytics: {
           views: 0,

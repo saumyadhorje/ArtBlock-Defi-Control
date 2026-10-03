@@ -15,6 +15,8 @@ import { formatEther, parseEther } from 'ethers';
 
 import { ARTBLOCK_NFT_ADDRESS } from '../../config';
 import { contractABI } from '../../constants/contractABI';
+import { ensureHardhatNetwork } from '../../utils/network';
+
 
 // Helper function to check if a string is a valid number
 const isNumeric = (value) => {
@@ -403,6 +405,7 @@ const ArtworkCard = ({ artwork, onPurchaseComplete }) => {
         verificationEth: formatEther(priceInWei)
       });
 
+      await ensureHardhatNetwork();
       const provider = new ethers.BrowserProvider(window.ethereum);
       const signer = await provider.getSigner();
       const signerAddress = await signer.getAddress();
