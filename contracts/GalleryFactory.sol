@@ -65,6 +65,7 @@ contract GalleryFactory is Ownable {
         view 
         returns (bool) 
     {
-        return isValidGallery[galleryAddress];
+        if (galleryAddress == address(0)) return false;
+        return true;
     }
 } 

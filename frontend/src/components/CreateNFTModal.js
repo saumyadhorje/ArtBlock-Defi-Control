@@ -6,12 +6,13 @@ import { ethers } from 'ethers';
 import { parseEther, formatEther } from 'ethers';
 
 const CreateNFTModal = ({ isOpen, onClose }) => {
+  const DEFAULT_GALLERY = "0xa16E02E87b7454126E5E10d957A927A7F5B5d2be";
   const [formData, setFormData] = useState({
     title: '',
     description: '',
     price: '',
     image: null,
-    galleryAddress: ''
+    galleryAddress: DEFAULT_GALLERY
   });
   
   const [previewUrl, setPreviewUrl] = useState(null);
@@ -43,23 +44,17 @@ const CreateNFTModal = ({ isOpen, onClose }) => {
 
   const validateGalleryAddress = (address) => {
     try {
-      // Simple regex for Ethereum address format
+      if (!address || address.trim() === '') {
+        setFormData(prev => ({ ...prev, galleryAddress: DEFAULT_GALLERY }));
+        return true;
+      }
       const addressRegex = /^0x[a-fA-F0-9]{40}$/;
-      
       if (!addressRegex.test(address)) {
         setLocalError('Invalid gallery address format. Must be a valid Ethereum address.');
         return false;
       }
-
-      // Additional check to ensure it's not the zero address
-      if (address === '0x0000000000000000000000000000000000000000') {
-        setLocalError('Cannot use zero address as gallery address');
-        return false;
-      }
-
       return true;
     } catch (error) {
-      console.error('Gallery address validation error:', error);
       setLocalError('Invalid gallery address');
       return false;
     }

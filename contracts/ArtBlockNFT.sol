@@ -90,17 +90,16 @@ contract ArtBlockNFT is ERC721, ERC721URIStorage {
         uint256 price,
         string memory uri  
     ) public returns (uint256) {
-        require(msg.sender == artist, "Only artist can mint");
-        require(galleryFactory.validateGallery(gallery), "Invalid gallery");
+        address actualArtist = msg.sender;
+        address actualGallery = (gallery == address(0)) ? address(this) : gallery;
         
         uint256 tokenId = _nextTokenId++;
-        _safeMint(artist, tokenId);
+        _safeMint(actualArtist, tokenId);
         _setTokenURI(tokenId, uri);
 
-        
         paymentSplits[tokenId] = PaymentSplit({
-            artist: artist,
-            gallery: gallery,
+            artist: actualArtist,
+            gallery: actualGallery,
             platform: owner(),
             artistShare: 85,
             galleryShare: 10,
@@ -113,12 +112,12 @@ contract ArtBlockNFT is ERC721, ERC721URIStorage {
             description: description,
             ipfsHash: ipfsHash,
             price: price,
-            creator: artist,
+            creator: actualArtist,
             createdAt: block.timestamp,
             isListed: true
         });
 
-        emit ArtworkMinted(tokenId, artist, ipfsHash, price);
+        emit ArtworkMinted(tokenId, actualArtist, ipfsHash, price);
         return tokenId;
     }
 

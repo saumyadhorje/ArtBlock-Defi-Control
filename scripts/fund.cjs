@@ -1,9 +1,9 @@
 const hre = require("hardhat");
 
 async function main() {
-  const targetAddress = process.argv[2];
+  const targetAddress = process.env.TARGET || process.argv[2] || "0xAF4c044D7D07BBaC772b5d54B96Fff0a8B346386";
   if (!targetAddress || !hre.ethers.isAddress(targetAddress)) {
-    console.error("Please provide a valid Ethereum address. Example:\n  npx hardhat run scripts/fund.cjs --network localhost 0xYourWalletAddress");
+    console.error("Invalid address");
     process.exit(1);
   }
 
