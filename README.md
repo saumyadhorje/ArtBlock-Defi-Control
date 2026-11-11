@@ -1,188 +1,262 @@
+# ArtBlock – Decentralized NFT Art Marketplace
 
-# ArtBlock - Decentralized Art Curation & Investment Platform
+ArtBlock is a blockchain-powered digital art marketplace that connects artists and buyers through NFTs. It enables artists to generate and showcase digital artwork, mint their creations as NFTs, and list them for sale. Buyers can explore the marketplace, purchase digital artwork securely using MetaMask, and view their purchased NFTs.
 
+The platform combines **AI-powered art generation, NFT technology, smart contracts, and decentralized storage** to create a transparent digital art ecosystem.
 
+## Key Features
 
+### 🎨 Artist Dashboard
+- Generate digital artwork using AI.
+- Upload and manage digital artwork.
+- Mint artwork as NFTs on the blockchain.
+- Set artwork prices and list NFTs for sale.
+- Manage created artwork and listing status.
+- Create and manage galleries.
 
-The **Digital Art Gallery Platform** bridges the gap between digital artists and curators by enabling the creation and management of professional virtual galleries. With an intuitive interface, curators can manage digital spaces while artists can showcase their work and discover opportunities to reach a broader audience.  
+### 🛒 Buyer Dashboard
+- Explore available NFT artworks.
+- View artwork details and prices.
+- Connect a MetaMask wallet.
+- Purchase listed NFTs using cryptocurrency.
+- View purchased artwork in the purchases section.
+- Track ownership of purchased NFTs.
 
-```mermaid
-flowchart TD
-    %% User Entry Points
-    subgraph UserEntry["User Entry Points"]
-        Artist["Artist"]
-        Gallery["Gallery Curator"]
-        Investor["Art Collector"]
-    end
+### 🤖 AI-Powered Art Generation
+- Generate artwork using AI-based image generation.
+- Create unique digital artwork from text prompts.
+- Integrate generated artwork into the NFT minting workflow.
 
-    %% Authentication
-    subgraph AuthFlow["Authentication Flow"]
-        WebApp["Web Application"]
-        MetaMask["MetaMask Wallet"]
-        Auth["Authentication Layer"]
-        Backend["Express Backend"]
-        DB[(MongoDB)]
-    end
+### ⛓️ Blockchain Integration
+- Solidity-based smart contracts for NFT creation and transactions.
+- NFT minting and ownership tracking.
+- Smart contract-based artwork purchases.
+- MetaMask wallet integration.
+- Local blockchain development using Anvil.
 
-    %% Artist Flow
-    subgraph ArtistFlow["Artist Workflow"]
-        IPFS["IPFS Storage"]
-        Contract["Smart Contract"]
-        Blockchain["Blockchain"]
-    end
+### 💰 Automated Payment Distribution
+When an artwork is purchased, the smart contract distributes the payment automatically:
 
-    %% Gallery Flow
-    subgraph GalleryFlow["Gallery Workflow"]
-        Collections["Gallery Collections"]
-    end
+| Recipient | Share |
+|---|---:|
+| Artist | 85% |
+| Gallery | 10% |
+| Platform | 5% |
 
-    %% Marketplace
-    subgraph MarketFlow["Marketplace Interactions"]
-        Market["NFT Marketplace"]
-    end
+### 🖼️ Gallery Management
+- Create and manage digital art galleries.
+- Associate artwork with galleries.
+- Support gallery-based artwork organization.
 
-    %% Purchase Flow
-    subgraph PurchaseFlow["NFT Purchase Flow"]
-        Payments["Payment Distribution"]
-        ArtistWallet["Artist Wallet (85%)"]
-        GalleryWallet["Gallery Wallet (10%)"]
-        Platform["Platform Wallet (5%)"]
-    end
+## Technology Stack
 
-    %% Analytics & Dashboard
-    subgraph Analytics["Analytics & Dashboard"]
-        AnalyticsEngine["Analytics Engine"]
-        ArtistDash["Artist Dashboard"]
-        GalleryDash["Gallery Dashboard"]
-        MarketStats["Market Statistics"]
-    end
+| Component | Technologies |
+|---|---|
+| Frontend | React.js, JavaScript, CSS |
+| Backend | Node.js, Express.js |
+| Database | MongoDB |
+| Blockchain | Solidity, Ethereum-compatible blockchain |
+| Smart Contracts | Hardhat |
+| Local Blockchain | Anvil |
+| Wallet Integration | MetaMask |
+| Blockchain Interaction | Ethers.js |
+| AI Image Generation | Hugging Face / FLUX |
+| Decentralized Storage | IPFS integration |
 
-    %% Connections
-    Artist & Gallery & Investor -->|Register/Login| WebApp
-    WebApp -->|Web3 Auth| MetaMask
-    MetaMask -->|Verify| Auth
-    Auth -->|JWT| Backend
-    Backend -->|Store User Data| DB
+## System Architecture
 
-    Artist -->|Upload Art| IPFS
-    IPFS -->|Get Hash| Contract
-    Contract -->|Mint NFT| Blockchain
+ArtBlock follows a full-stack architecture connecting the frontend, backend, database, AI image generation service, and blockchain.
 
-    Gallery -->|Curate| Collections
-    Collections -->|Partner with| Artist
-    Gallery -->|Set Commission| Contract
-
-    Blockchain -->|List NFTs| Market
-    Market -->|View| Investor
-    Market -->|Curate| Gallery
-
-    Investor -->|Buy NFT| Contract
-    Contract -->|Split Payment| Payments
-    Payments -->|85%| ArtistWallet
-    Payments -->|10%| GalleryWallet
-    Payments -->|5%| Platform
-
-    Blockchain -->|Events| AnalyticsEngine
-    DB -->|User Data| AnalyticsEngine
-    AnalyticsEngine -->|Stats| ArtistDash & GalleryDash & MarketStats
-    ArtistDash -->|View| Artist
-    GalleryDash -->|View| Gallery
-    MarketStats -->|View| Investor
+```text
+             ARTIST / BUYER
+                    |
+                    v
+             REACT FRONTEND
+                    |
+          +---------+---------+
+          |                   |
+          v                   v
+     EXPRESS BACKEND      METAMASK
+          |                   |
+          v                   v
+       MONGODB          BLOCKCHAIN
+          |                   |
+          v                   v
+    AI IMAGE SERVICE    SMART CONTRACTS
+          |                   |
+          v                   v
+     IPFS STORAGE       NFT OWNERSHIP
+                              |
+                              v
+                       PAYMENT SPLIT
 ```
 
-## Core Features  
+## Smart Contract Functionality
 
-### **Gallery Management**  
-- Complete control over virtual spaces with customizable themes.  
-- Set commission rates and establish submission guidelines.  
-- Robust tracking of gallery statistics, visitor engagement, and artist contributions.  
-- Support for multiple gallery configurations for diverse themes or communities.  
+The smart contracts support the core NFT marketplace operations:
 
-### **Artist Features**  
-- Comprehensive portfolio submission and application tracking.  
-- Real-time updates on application status and communication with curators.  
-- Tools to manage portfolios, set artwork prices, and control visibility.  
-- Integration with social media for enhanced exposure.  
+- Minting new artwork as NFTs.
+- Storing artwork metadata.
+- Managing NFT listing status.
+- Purchasing listed artwork.
+- Transferring NFT ownership.
+- Distributing payments between the artist, gallery, and platform.
 
-### **Gallery Navigation**  
-- **Overview Tab**: Essential statistics, featured artists, and recent activities.  
-- **Artworks Tab**: Grid and list viewing options with search and filtering capabilities.  
-- **Artists Tab**: Detailed artist profiles, portfolio previews, and performance metrics.  
-- **Applications Tab**: Streamlined review process with organized queue and communication tools.  
-- **Settings Tab**: Comprehensive control over gallery configurations and permissions.  
+## Application Workflow
 
----
+### Artist Workflow
+1. Register or log in as an artist.
+2. Connect a MetaMask wallet.
+3. Generate or upload digital artwork.
+4. Mint the artwork as an NFT.
+5. Set its price and list it on the marketplace.
+6. Manage created artworks through the artist dashboard.
 
-## System Architecture & Flows  
+### Buyer Workflow
+1. Register or log in as a buyer.
+2. Connect a MetaMask wallet.
+3. Browse available NFTs.
+4. Select an artwork and initiate a purchase.
+5. Confirm the blockchain transaction through MetaMask.
+6. View purchased artwork in the purchases section.
 
-### **User Authentication Flow**  
-- Secure sign-up/login process with role-based access control for curators and artists.  
+## Running the Project Locally
 
-### **Gallery Creation & Management Flow**  
-- End-to-end flow for creating and customizing galleries, managing artworks, and tracking metrics.  
+### Prerequisites
+- Node.js and npm
+- MongoDB
+- MetaMask browser extension
+- Foundry (Anvil)
+- Git
 
-### **Artist Application Process**  
-- Professional application system with status tracking, communication tools, and detailed submissions.  
+### 1. Clone the Repository
 
-### **Data Relationship Model**  
-- Users, Galleries, Applications, Artists, and Artworks schemas interlinked for seamless management.  
+```bash
+git clone https://github.com/saumyadhorje/ArtBlock-Defi-Control.git
+cd ArtBlock-Defi-Control
+```
 
-### **Gallery View Navigation**  
-- Tab-based interface optimized for efficient gallery exploration and management.  
+### 2. Install Dependencies
 
----
+Install the project dependencies in the root, backend, and frontend directories as applicable.
 
-## Technical Architecture  
+```bash
+npm install
+```
 
-### **Frontend Architecture**  
-- **Framework**: React.js with component-based architecture for modularity.  
-- **Styling**: Tailwind CSS for consistency, Framer Motion for smooth animations.  
-- **Responsiveness**: Optimized for devices of all sizes.  
+```bash
+cd backend
+npm install
+```
 
-### **Database Architecture**  
-- **Schemas**:  
-  - **Users**: Manages authentication and roles.  
-  - **Galleries**: Tracks gallery configurations and associations.  
-  - **Applications**: Records artist submissions and review statuses.  
-  - **Artists**: Manages profiles and portfolios.  
-  - **Artworks**: Stores individual artwork details and gallery associations.  
+```bash
+cd ../frontend
+npm install
+```
 
----
+### 3. Configure Environment Variables
 
-## Security Features  
-- **Role-based Access Control**: Ensures users have permissions aligned with their roles.  
-- **Secure Authentication**: Strong protocols to protect user credentials.  
-- **Data Validation**: Ensures integrity of submitted content and user data.  
-- **Content Moderation Tools**: Maintains gallery integrity and user trust.  
-- **Privacy Controls**: Safeguards user data and communication channels.  
+Create the required `.env` files for the backend, frontend, and AI services.
 
----
+Configure the necessary values for:
+- MongoDB connection
+- Authentication and JWT
+- AI image generation API
+- Blockchain and contract configuration
+- IPFS integration
 
-## Future Enhancements  
-- **NFT Integration**: Support for tokenized artworks.  
-- **Virtual Gallery Tours**: Immersive VR-based gallery experiences.  
-- **Advanced Analytics**: Enhanced insights into performance and engagement.  
-- **Real-Time Notifications**: Instant updates on gallery activities.  
-- **Integrated Chat System**: Seamless communication between users.  
-- **Mobile App and PWA Support**: Broadened accessibility and convenience.  
+Do not commit API keys, passwords, or private keys to GitHub.
 
----
+### 4. Start the Local Blockchain
 
-## Project Status  
-The project is currently in **active development**, with a focus on core feature implementation and optimization. It is designed for scalability, maintainability, and an exceptional user experience.  
+From the project root, run:
 
----
+```powershell
+anvil --port 8546 --state .\anvil.state.json --state-interval 30
+```
 
-## Contributing  
-This project is **closed for external contributions**. For inquiries or potential collaboration, please contact the development team.  
+### 5. Start the Backend
 
----
+```bash
+cd backend
+npm start
+```
 
-## License  
-All rights reserved. This project is **proprietary and confidential**.  
+The backend runs on port `5000` in the local development setup.
 
----
+### 6. Start the Frontend
 
-## Notes  
-This documentation will evolve as the project progresses. Stay tuned for updates.  
+Open another terminal:
 
+```bash
+cd frontend
+npm start
+```
+
+Open the local frontend URL displayed in the terminal.
+
+### 7. Connect MetaMask
+
+- Add the local Anvil network to MetaMask.
+- Network name: Anvil Local
+- RPC URL: `http://127.0.0.1:8546`
+- Chain ID: `31337`
+- Currency symbol: `ETH`
+
+For local testing, import an Anvil development account into MetaMask. Never use Anvil test accounts or private keys on a real network.
+
+## Project Structure
+
+```text
+ArtBlock-Defi-Control/
+│
+├── backend/
+│   ├── controllers/
+│   ├── models/
+│   ├── routes/
+│   └── server.js
+│
+├── contracts/
+│   ├── ArtBlockNFT.sol
+│   └── ArtCuration.sol
+│
+├── frontend/
+│   └── src/
+│       ├── components/
+│       ├── context/
+│       ├── hooks/
+│       ├── pages/
+│       └── utils/
+│
+├── scripts/
+├── test/
+├── hardhat.anvil.config.cjs
+└── README.md
+```
+
+## Security Considerations
+
+- Role-based access for artist and buyer functionality.
+- Wallet-based blockchain transaction confirmation.
+- Smart contract validation for NFT purchases.
+- Backend validation of purchase synchronization.
+- Environment variables for sensitive configuration.
+- Blockchain transaction records for transparent ownership tracking.
+
+## Future Enhancements
+
+- Deployment to a public blockchain testnet or mainnet.
+- Enhanced NFT discovery and recommendation features.
+- Advanced artwork analytics.
+- Improved decentralized storage integration.
+- Expanded marketplace functionality.
+
+## Project Status
+
+**Active Development**
+
+ArtBlock is being developed as a decentralized NFT art marketplace with AI-powered artwork generation, blockchain-based NFT minting, wallet integration, and smart contract-driven purchases.
+
+## License
+
+All rights reserved. This project is proprietary and confidential.
