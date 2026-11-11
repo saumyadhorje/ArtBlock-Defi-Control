@@ -206,6 +206,37 @@ const Auth = () => {
     return () => gsap.killTweensOf(glowElement);
   }, []);
 
+  useEffect(() => {
+    if (window.ethereum) {
+      const handleAccounts = (accounts) => {
+        if (accounts && accounts.length > 0) {
+          setFormData(prev => ({ ...prev, walletAddress: accounts[0] }));
+        }
+      };
+      window.ethereum.on('accountsChanged', handleAccounts);
+      return () => {
+        window.ethereum.removeListener('accountsChanged', handleAccounts);
+      };
+    }
+  }, []);
+
+  const switchWallet = async () => {
+    try {
+      if (!window.ethereum) return;
+      await ensureHardhatNetwork();
+      await window.ethereum.request({
+        method: 'wallet_requestPermissions',
+        params: [{ eth_accounts: {} }]
+      });
+      const provider = new BrowserProvider(window.ethereum);
+      const signer = await provider.getSigner();
+      const address = await signer.getAddress();
+      setFormData(prev => ({ ...prev, walletAddress: address }));
+    } catch (err) {
+      console.warn('Switch account canceled or failed:', err);
+    }
+  };
+
   const connectWallet = async () => {
     try {
       if (!window.ethereum) {
@@ -256,15 +287,44 @@ const Auth = () => {
       }
 
       // Handle login
-      const response = await axiosInstance.post('/api/auth/login', {
-        password: formData.password,
-        walletAddress: formData.walletAddress
-      });
+      // Verify that the selected MetaMask account matches the form's wallet.
+const provider = new BrowserProvider(window.ethereum);
+const signer = await provider.getSigner();
+const connectedAddress = await signer.getAddress();
 
-      console.log('Login successful:', {
-        token: response.data.token,
-        user: response.data.user
-      });
+if (
+  connectedAddress.toLowerCase() !==
+  formData.walletAddress.toLowerCase()
+) {
+  throw new Error(
+    'Your selected MetaMask account changed. Please reconnect your wallet.'
+  );
+}
+
+// Step 1: Authenticate your existing ArtBlock account.
+const challengeResponse = await axiosInstance.post(
+  '/api/auth/wallet-link/challenge',
+  {
+    username: formData.username.trim(),
+    password: formData.password,
+    walletAddress: connectedAddress
+  }
+);
+
+// Step 2: Ask MetaMask to prove ownership of the wallet.
+// This is a message signature, not a transaction.
+const signature = await signer.signMessage(
+  challengeResponse.data.message
+);
+
+// Step 3: Verify the signature and link the wallet.
+const response = await axiosInstance.post(
+  '/api/auth/wallet-link/confirm',
+  {
+    challengeId: challengeResponse.data.challengeId,
+    signature
+  }
+);
 
       setUserSession(response.data.token, response.data.user);
       
@@ -449,20 +509,31 @@ const Auth = () => {
           animate={{ opacity: 1, y: 0 }}
           className="max-w-md w-full space-y-8"
         >
-          {/* Connected Wallet Badge */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2 }}
-            className="inline-flex items-center gap-2 px-4 py-2 
-              bg-white/5 backdrop-blur-lg rounded-full 
-              border border-white/10"
-          >
-            <div className="w-2 h-2 bg-[#60A5FA] rounded-full" />
-            <span className="text-white/80 text-sm font-medium">
-              Wallet Connected: {formData.walletAddress.slice(0, 6)}...{formData.walletAddress.slice(-4)}
-            </span>
-          </motion.div>
+          {/* Connected Wallet Badge & Switcher */}
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.2 }}
+              className="inline-flex items-center gap-2 px-4 py-2 
+                bg-white/5 backdrop-blur-lg rounded-full 
+                border border-white/10"
+            >
+              <div className="w-2 h-2 bg-[#60A5FA] rounded-full animate-pulse" />
+              <span className="text-white/80 text-sm font-medium">
+                Wallet: {formData.walletAddress.slice(0, 6)}...{formData.walletAddress.slice(-4)}
+              </span>
+            </motion.div>
+            <motion.button
+              type="button"
+              onClick={switchWallet}
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              className="px-3 py-1.5 text-xs font-medium rounded-lg bg-white/5 hover:bg-white/10 border border-white/20 text-[#60A5FA] transition-all"
+            >
+              Change Account ⇄
+            </motion.button>
+          </div>
 
           {/* Form Container */}
           <motion.div
@@ -502,29 +573,31 @@ const Auth = () => {
             )}
 
             <form onSubmit={handleSubmit} className="space-y-6">
-              {!isLogin && (
-                <motion.div
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.4 }}
-                >
-                  <label className="block text-white/60 text-sm mb-2">
-                    Username
-                  </label>
-                  <input
-                    type="text"
-                    name="username"
-                    value={formData.username}
-                    onChange={handleChange}
-                    className="w-full px-4 py-3 bg-white/[0.03] border border-white/10 
-                      rounded-xl text-white placeholder-white/30
-                      focus:border-[#60A5FA] focus:ring-1 focus:ring-[#60A5FA]
-                      transition-colors duration-200 outline-none"
-                    placeholder="Enter your username"
-                    required
-                  />
-                </motion.div>
-              )}
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.4 }}
+              >
+                <label className="block text-white/60 text-sm mb-2">
+                  Username {isLogin ? (
+                    <span className="text-white/40 text-xs block sm:inline sm:ml-2">
+                      (Enter 'pq' to link this wallet, or leave blank if already registered)
+                    </span>
+                  ) : null}
+                </label>
+                <input
+                  type="text"
+                  name="username"
+                  value={formData.username}
+                  onChange={handleChange}
+                  className="w-full px-4 py-3 bg-white/[0.03] border border-white/10 
+                    rounded-xl text-white placeholder-white/30
+                    focus:border-[#60A5FA] focus:ring-1 focus:ring-[#60A5FA]
+                    transition-colors duration-200 outline-none"
+                  placeholder={isLogin ? "e.g. pq" : "Enter your username"}
+                  required={!isLogin}
+                />
+              </motion.div>
 
               <motion.div
                 initial={{ opacity: 0, y: 10 }}

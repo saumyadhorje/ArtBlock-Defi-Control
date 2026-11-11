@@ -1,17 +1,17 @@
 // For AI image generation
-const AI_SERVICE_URL = 'http://localhost:3001/api';
-// i mistakenly named two ports in backend env to be diff 
+const AI_SERVICE_URL = process.env.REACT_APP_AI_SERVICE_URL || 'http://localhost:3001/api';
 // For authentication and other services
-const AUTH_SERVICE_URL = 'http://localhost:5000/api';
+const AUTH_SERVICE_URL = process.env.REACT_APP_AUTH_SERVICE_URL || 'http://localhost:5000/api';
 
 export const checkImageHashExists = async (imageHash) => {
   try {
     const response = await fetch(`${AI_SERVICE_URL}/public/ai-hash/${imageHash}`);
+    if (!response.ok) return false;
     const data = await response.json();
-    return data.exists;
+    return !!data.exists;
   } catch (error) {
-    console.error('Error checking hash:', error);
-    throw error;
+    console.warn('AI hash verification service offline, skipping deduplication check:', error.message);
+    return false;
   }
 };
 
@@ -46,9 +46,10 @@ export const storeNFTData = async (nftData) => {
         metadata: nftData.metadata
       }),
     });
+    if (!response.ok) return { success: false };
     return await response.json();
   } catch (error) {
-    console.error('Error storing NFT:', error);
-    throw error;
+    console.warn('AI hash recording service offline, proceeding:', error.message);
+    return { success: false };
   }
-}; 
+};

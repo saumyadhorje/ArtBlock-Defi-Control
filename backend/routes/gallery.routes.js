@@ -29,7 +29,8 @@ router.get('/galleries/:galleryId/submissions', async (req, res) => {
       .populate({
         path: 'submissions.nftId',
         model: 'NFT',
-        select: 'tokenId title description ipfsHash price artistAddress'
+        //select: 'tokenId title description ipfsHash price artistAddress'
+        select: 'tokenId title description ipfsHash price artistAddress galleryAddress contractAddress isListed metadata network'
       });
 
     if (!gallery) {

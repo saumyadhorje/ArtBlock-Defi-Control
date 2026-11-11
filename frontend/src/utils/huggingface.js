@@ -1,158 +1,142 @@
+
 import { generateImageHash } from './imageHash';
 import { checkImageHashExists, storeNFTData } from './api';
 
-
-const HF_API_TOKEN = "";
 export const MODELS = {
   FLUX_1_DEV: {
-    url: "https://api-inference.huggingface.co/models/black-forest-labs/FLUX.1-dev",
-    name: "FLUX.1 Dev",
-    prefix: "FLUX.1:",
+    name: 'FLUX.1 Dev',
     specialties: [
-      'abstract', 'pattern', 'landscape', 'modern', 'minimal',
-      'geometric', 'artistic', 'experimental'
+      'cyberpunk',
+      'anime',
+      'fantasy',
+      'abstract',
+      'pixel art',
+      'digital painting'
     ],
     bestFor: {
       quickGeneration: true,
-      abstractArt: true,
-      simpleDesigns: true
+      artisticDetails: true,
+      modernAesthetics: true
     }
   }
 };
 
+const generateUniquePrompt = (basePrompt, style = '', attempt = 0) => {
+  const seed = `${Date.now()}-${Math.floor(Math.random() * 100000)}`;
+  const cleanBase = basePrompt.replace(/\[seed:[^\]]+\]/, '').trim();
+  const styleString = style ? `, in ${style} style` : '';
 
-const recentPrompts = new Set();
+  const variations = [
+    'cinematic lighting',
+    'vivid color palette',
+    'intricate textures',
+    'dynamic composition'
+  ];
 
-const generateUniquePrompt = (basePrompt, attempt = 0) => {
-  const timestamp = Date.now();
-  const randomSeed = Math.random().toString(36).substring(7);
-  const uniqueIdentifier = `${timestamp}-${randomSeed}`;
-  
-  const cleanPrompt = basePrompt.replace(/\[seed:[^\]]+\]/, '').trim();
-  
-  if (recentPrompts.has(cleanPrompt) || attempt > 0) {
-    const variations = [
-      'with slightly different lighting',
-      'with modified background',
-      'with alternative color scheme',
-      'from a different angle',
-      'with subtle texture changes'
-    ];
-    const variation = variations[attempt % variations.length];
-    console.log(` Detected duplicate prompt! Adding variation "${variation}" to create unique NFT`);
-    return `${basePrompt} ${variation} [seed:${uniqueIdentifier}]`;
-  }
-  
-  
-  recentPrompts.add(cleanPrompt);
- 
-  if (recentPrompts.size > 10) {
-    recentPrompts.delete(recentPrompts.values().next().value);
-  }
-  
-  return `${basePrompt} [seed:${uniqueIdentifier}]`;
+  const suffix =
+    attempt > 0 ? `, ${variations[attempt % variations.length]}` : '';
+
+  return `${cleanBase}${styleString}${suffix} [seed:${seed}]`;
 };
 
-
-const imageCache = new Map();
-
-export const generateImage = async (prompt) => {
-  const model = MODELS.FLUX_1_DEV;
-  const cacheKey = `FLUX_1_DEV:${prompt}`;
-
-  // Check cache first
-  if (imageCache.has(cacheKey)) {
-    return imageCache.get(cacheKey);
-  }
-
+export const generateImage = async (prompt, style = '') => {
   try {
-    const response = await fetch(model.url, {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${HF_API_TOKEN}`,
-        "Content-Type": "application/json",
-        "Accept": "application/json",
-      },
-      body: JSON.stringify({
-        inputs: prompt,
-        options: {
-          wait_for_model: true,
-          use_cache: true
-        }
-      }),
-    });
+    const response = await fetch(
+      'http://localhost:3001/api/public/generate-image',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          prompt: prompt.replace(/\[seed:[^\]]+\]/, '').trim(),
+          style
+        }),
+        signal: AbortSignal.timeout(180000)
+      }
+    );
 
-    // Handle queue status
-    if (response.status === 503) {
-      const { estimated_time } = await response.json();
-      await new Promise(resolve => setTimeout(resolve, estimated_time * 1000));
-      return generateImage(prompt); // Retry
-    }
+    const data = await response.json();
 
     if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || `HTTP error! status: ${response.status}`);
+      throw new Error(
+        data.error ||
+          `Image generation failed with status ${response.status}.`
+      );
     }
 
-    const blob = await response.blob();
-    const imageUrl = URL.createObjectURL(blob);
-    
-    
-    imageCache.set(cacheKey, imageUrl);
-    
-    return imageUrl;
+    if (
+      typeof data.imageUrl !== 'string' ||
+      !data.imageUrl.startsWith('data:image/')
+    ) {
+      throw new Error('The server did not return valid image data.');
+    }
+
+    return data.imageUrl;
   } catch (error) {
-    console.error(`Error generating image with ${model.name}:`, error);
-    throw error;
+    console.error('Backend image generation error:', error);
+    throw new Error(
+      error.message || 'AI image generation failed. Please try again.'
+    );
   }
 };
 
-export const generateUniqueImage = async (prompt, maxAttempts = 3) => {
-  let attempt = 0;
-  
-  while (attempt < maxAttempts) {
+export const generateUniqueImage = async (
+  prompt,
+  style = '',
+  maxAttempts = 3
+) => {
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     try {
-      const uniquePrompt = generateUniquePrompt(prompt, attempt);
-      console.log(` Using prompt with FLUX.1 Dev: "${uniquePrompt}"`);
-      
-      const imageUrl = await generateImage(uniquePrompt);
-      const imageHash = await generateImageHash(imageUrl);
-      
-      // Check if hash exists in PostgreSQL here
-      const exists = await checkImageHashExists(imageHash);
-      
-      if (exists) {
-        console.log(` Hash ${imageHash} already exists. Attempting variation...`);
-        attempt++;
-        continue;
+      const finalPrompt = generateUniquePrompt(prompt, style, attempt);
+      const imageUrl = await generateImage(finalPrompt, style);
+
+      let imageHash = `${Date.now()}-${Math.random()
+        .toString(36)
+        .slice(2)}`;
+
+      try {
+        imageHash = await generateImageHash(imageUrl);
+
+        const exists = await checkImageHashExists(imageHash);
+
+        if (exists && attempt < maxAttempts - 1) {
+          continue;
+        }
+      } catch (hErr) {
+        console.warn('Hash checking notice:', hErr.message);
       }
-      
-      // Store in PostgreSQL
+
       await storeNFTData({
         imageHash,
-        prompt: uniquePrompt,
-        imageUrl,
+        prompt: finalPrompt,
+        imageUrl: null,
         metadata: {
           generationAttempt: attempt,
           modelUsed: MODELS.FLUX_1_DEV.name,
-          timestamp: new Date().toISOString()
+          style
         }
       });
-      
-      console.log(` Successfully generated unique NFT using FLUX.1 Dev on attempt ${attempt + 1}`);
-      
+
       return {
         imageUrl,
         imageHash,
-        prompt: uniquePrompt,
+        prompt: finalPrompt,
         modelUsed: MODELS.FLUX_1_DEV.name
       };
-      
     } catch (error) {
-      console.error(` Attempt ${attempt + 1} failed:`, error);
-      attempt++;
+      if (attempt === maxAttempts - 1) {
+        throw error;
+      }
+
+      console.error(
+        `Image generation attempt ${attempt + 1} failed:`,
+        error
+      );
     }
   }
-  
-  throw new Error('Failed to generate a unique image after multiple attempts');
-}; 
+
+  throw new Error(
+    'Failed to generate a unique image. Please adjust your prompt and try again.'
+  );
+};

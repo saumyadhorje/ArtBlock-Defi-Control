@@ -28,20 +28,25 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     const checkWallet = async () => {
       if (window.ethereum) {
-        const accounts = await window.ethereum.request({ 
-          method: 'eth_accounts' 
-        });
-        
-        const currentAddress = accounts[0];
-        if (currentAddress) {
-          const savedRole = getRoleForAddress(currentAddress);
-          if (savedRole) {
-            setUserRole(savedRole);
+        try {
+          const accounts = await window.ethereum.request({ 
+            method: 'eth_accounts' 
+          });
+          
+          const currentAddress = accounts[0];
+          if (currentAddress) {
             setWalletAddress(currentAddress);
-          } else {
-            setUserRole(null);
-            setWalletAddress(null);
+            const userStr = localStorage.getItem('artblock_user');
+            const storedUser = userStr ? JSON.parse(userStr) : null;
+            if (storedUser && storedUser.walletAddress?.toLowerCase() === currentAddress.toLowerCase()) {
+              setUserRole(storedUser.role);
+            } else {
+              const savedRole = getRoleForAddress(currentAddress);
+              setUserRole(savedRole || null);
+            }
           }
+        } catch (e) {
+          console.warn('checkWallet failed:', e);
         }
       }
     };
@@ -95,6 +100,7 @@ export const AuthProvider = ({ children }) => {
       userRole, 
       walletAddress, 
       saveUserRole, 
+      setUserSession,
       logout 
     }}>
       {children}

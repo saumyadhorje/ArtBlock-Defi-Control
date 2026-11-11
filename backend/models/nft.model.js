@@ -46,6 +46,19 @@ const nftSchema = new mongoose.Schema({
     type: Boolean,
     default: true
   },
+    owner: {
+    type: String,
+    lowercase: true,
+    default: null
+  },
+  lastSalePrice: {
+    type: String,
+    default: null
+  },
+  lastSaleDate: {
+    type: Date,
+    default: null
+  },
   createdAt: {
     type: Date,
     default: Date.now

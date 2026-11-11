@@ -162,131 +162,137 @@ const recordInvestment = async (req, res) => {
   }
 };
 
+
 export const buyArtwork = async (nftId, buyer, data) => {
-    try {
-        console.log('🎨 Purchase attempt:', { 
-            nftId,  // This should now be the NFT document ID
-            buyerId: buyer.id,
-            tokenId: data.tokenId,
-            data 
-        });
+  try {
+    console.log('Buyer purchase sync:', {
+      nftId,
+      buyerId: buyer._id,
+      tokenId: data.tokenId,
+      transactionHash: data.transactionHash
+    });
 
-        // Find the NFT using the correct ID
-        let nft = await NFT.findById(nftId);
+    // 1. Prevent duplicate processing of the same blockchain transaction
+    let transaction = await Transaction.findOne({
+      transactionHash: data.transactionHash
+    });
 
-        if (!nft) {
-            // Fallback to finding by tokenId
-            nft = await NFT.findOne({ tokenId: data.tokenId });
-        }
+    // 2. Find the NFT record
+    let nft = await NFT.findById(nftId);
 
-        console.log('🔍 NFT lookup result:', {
-            found: !!nft,
-            nftId,
-            tokenId: data.tokenId,
-            nftData: data.nftData
-        });
-
-        if (!nft && data.nftData) {
-            console.log(' Creating new NFT record from data:', data.nftData);
-            // Create NFT record if it doesn't exist
-            nft = new NFT({
-                tokenId: data.tokenId,
-                title: data.nftData.title,
-                description: data.nftData.description,
-                ipfsHash: data.nftData.ipfsHash,
-                price: data.price,
-                artistAddress: data.nftData.artistAddress,
-                galleryAddress: data.nftData.galleryAddress,
-                contractAddress: data.nftData.contractAddress,
-                metadata: data.nftData.metadata || {
-                    name: data.nftData.title,
-                    description: data.nftData.description,
-                    image: `ipfs://${data.nftData.ipfsHash}`
-                },
-                owner: buyer.walletAddress,
-                isListed: false
-            });
-            await nft.save();
-        }
-
-        if (!nft) {
-            throw new Error(`NFT not found with ID: ${nftId} or tokenId: ${data.tokenId}`);
-        }
-
-        // Create transaction record
-        const transaction = new Transaction({
-            nftId: nft._id,
-            tokenId: data.tokenId,
-            seller: nft.artistAddress,
-            buyer: buyer.walletAddress,
-            price: data.price,
-            transactionHash: data.transactionHash,
-            paymentSplits: {
-                artist: {
-                    address: nft.artistAddress,
-                    amount: data.paymentSplits.artist
-                },
-                gallery: {
-                    address: nft.galleryAddress,
-                    amount: data.paymentSplits.gallery
-                },
-                platform: {
-                    amount: data.paymentSplits.platform
-                }
-            },
-            gasInfo: data.gasInfo
-        });
-
-        console.log(' Saving transaction:', {
-            id: transaction._id,
-            hash: data.transactionHash
-        });
-
-        await transaction.save();
-
-        // Update NFT ownership
-        nft.isListed = false;
-        nft.owner = buyer.walletAddress;
-        nft.lastSalePrice = data.price;
-        nft.lastSaleDate = new Date();
-        await nft.save();
-
-        // Update gallery stats if applicable
-        if (nft.galleryId) {
-            await Gallery.findByIdAndUpdate(nft.galleryId, {
-                $inc: {
-                    'stats.totalSales': 1,
-                    'stats.totalVolume': parseFloat(data.price)
-                }
-            });
-        }
-
-        // Update artist stats
-        if (nft.artistAddress) {
-            await User.findOneAndUpdate(
-                { walletAddress: nft.artistAddress },
-                {
-                    $inc: {
-                        'stats.totalSales': 1,
-                        'stats.totalEarnings': parseFloat(data.paymentSplits.artist)
-                    }
-                }
-            );
-        }
-
-        console.log(' Purchase completed successfully');
-
-        return {
-            success: true,
-            message: 'NFT purchased successfully',
-            transaction: transaction.toObject(),
-            nft: nft.toObject()
-        };
-
-    } catch (error) {
-        console.error(' Purchase error:', error);
-        throw error;
+    if (!nft) {
+      nft = await NFT.findOne({ tokenId: data.tokenId });
     }
+
+    if (!nft && data.nftData) {
+      nft = new NFT({
+        tokenId: data.tokenId,
+        title: data.nftData.title,
+        description: data.nftData.description,
+        ipfsHash: data.nftData.ipfsHash,
+        price: data.price,
+        artistAddress: data.nftData.artistAddress,
+        galleryAddress: data.nftData.galleryAddress,
+        contractAddress: data.nftData.contractAddress,
+        metadata: data.nftData.metadata || {
+          name: data.nftData.title,
+          description: data.nftData.description,
+          image: `ipfs://${data.nftData.ipfsHash}`
+        },
+        owner: buyer.walletAddress,
+        isListed: false
+      });
+
+      await nft.save();
+    }
+
+    if (!nft) {
+      throw new Error(`NFT not found: ${nftId} / token ${data.tokenId}`);
+    }
+
+    // 3. Create transaction record only once
+    if (!transaction) {
+      transaction = new Transaction({
+        nftId: nft._id,
+        tokenId: data.tokenId,
+        seller: nft.artistAddress,
+        buyer: buyer.walletAddress,
+        price: data.price,
+        transactionHash: data.transactionHash,
+        paymentSplits: {
+          artist: {
+            address: nft.artistAddress,
+            amount: data.paymentSplits.artist
+          },
+          gallery: {
+            address: nft.galleryAddress,
+            amount: data.paymentSplits.gallery
+          },
+          platform: {
+            amount: data.paymentSplits.platform
+          }
+        },
+        gasInfo: data.gasInfo
+      });
+
+      await transaction.save();
+    }
+
+    // 4. Sync NFT ownership to MongoDB
+    nft.isListed = false;
+    nft.owner = buyer.walletAddress;
+    nft.lastSalePrice = data.price;
+    nft.lastSaleDate = nft.lastSaleDate || new Date();
+    await nft.save();
+
+    // 5. Add NFT to buyer's portfolio (the missing functionality)
+    const investor = await Investor.findById(buyer._id);
+
+    if (!investor) {
+      throw new Error('Buyer investor account not found');
+    }
+
+    const alreadyOwned = investor.portfolio.ownedNFTs.some(
+      id => id.toString() === nft._id.toString()
+    );
+
+    if (!alreadyOwned) {
+      investor.portfolio.ownedNFTs.push(nft._id);
+
+      investor.portfolio.investmentHistory.push({
+        nftId: nft._id,
+        purchasePrice: Number(data.price) / 1e18,
+        purchaseDate: new Date(),
+        currentValue: Number(data.price) / 1e18,
+        roi: 0
+      });
+
+      investor.analytics.totalInvested =
+        (investor.analytics.totalInvested || 0) + Number(data.price) / 1e18;
+
+      investor.analytics.totalTransactions =
+        (investor.analytics.totalTransactions || 0) + 1;
+
+      investor.analytics.avgInvestmentSize =
+        investor.analytics.totalInvested /
+        investor.analytics.totalTransactions;
+
+      await investor.save();
+    }
+
+    console.log('Buyer purchase sync completed');
+
+    return {
+      success: true,
+      message: 'NFT purchased successfully',
+      transaction: transaction.toObject(),
+      nft: nft.toObject()
+    };
+
+  } catch (error) {
+    console.error('Buyer purchase sync error:', error);
+    throw error;
+  }
 };
 
 // Helper function to update gallery analytics

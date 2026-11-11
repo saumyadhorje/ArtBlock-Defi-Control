@@ -56,8 +56,17 @@ const WalletButton = () => {
   const token = localStorage.getItem('artblock_token');
 
   if (!user || !token) {
-    navigate('/auth');
-    return null;
+    return (
+      <motion.button
+        whileHover={{ y: -2 }}
+        whileTap={{ scale: 0.98 }}
+        onClick={() => navigate('/auth')}
+        className="px-4 py-2 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-500 text-white font-medium text-sm flex items-center gap-2"
+      >
+        <WalletIcon className="w-4 h-4" />
+        <span>Connect Wallet</span>
+      </motion.button>
+    );
   }
 
   const handleDisconnect = () => {
@@ -147,6 +156,23 @@ const Navbar = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-20">
             <Logo />
+            <div className="flex items-center gap-3">
+              <NavButton 
+                icon={Building2} 
+                onClick={() => navigate('/galleries')} 
+                active={window.location.pathname === '/galleries'}
+              >
+                Galleries
+              </NavButton>
+              <NavButton 
+                icon={ImageIcon} 
+                onClick={() => navigate('/ai-generator')} 
+                active={window.location.pathname === '/ai-generator'}
+              >
+                AI Generator
+              </NavButton>
+              <WalletButton />
+            </div>
           </div>
         </div>
       </motion.nav>

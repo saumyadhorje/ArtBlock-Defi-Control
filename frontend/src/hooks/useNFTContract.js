@@ -1,217 +1,251 @@
 import { useState } from 'react';
-import { BrowserProvider, Contract, parseEther, formatEther } from 'ethers';
-import { uploadToIPFS } from '../utils/ipfs';
+import { BrowserProvider, Contract, formatEther, isAddress, parseEther, ZeroAddress, getAddress } from 'ethers';
+import { uploadToIPFS, getIPFSUrl } from '../utils/ipfs';
 import { contractABI } from '../constants/contractABI';
-import axiosInstance from '../utils/axios';
+import { ARTBLOCK_NFT_ADDRESS, NETWORK_ID } from '../config';
 import { ensureHardhatNetwork } from '../utils/network';
+import axiosInstance from '../utils/axios';
+
+const getErrorMessage = (error) => {
+  if (error?.code === 4001 || error?.info?.error?.code === 4001) return 'Transaction rejected in MetaMask.';
+  if (error?.code === 'INSUFFICIENT_FUNDS') {
+    return 'Insufficient ETH for gas. Switch MetaMask to your funded development account on Hardhat Localhost (Chain ID 31337); never use real funds for local development.';
+  }
+  if (error?.reason) return error.reason;
+  return error?.shortMessage || error?.message || 'NFT transaction failed.';
+};
 
 const useNFTContract = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  const mintNFT = async (artwork, galleryAddress) => {
-    if (!window.ethereum) {
-      throw new Error('MetaMask is not installed');
+  const getContract = async (withSigner = false) => {
+    if (!window.ethereum) throw new Error('MetaMask is not installed.');
+    if (!ARTBLOCK_NFT_ADDRESS || !isAddress(ARTBLOCK_NFT_ADDRESS)) {
+      throw new Error('NFT contract address is not configured for this deployment.');
     }
+    await ensureHardhatNetwork();
+    const provider = new BrowserProvider(window.ethereum);
+    const code = await provider.getCode(ARTBLOCK_NFT_ADDRESS);
+    if (code === '0x') throw new Error(`No NFT contract is deployed at ${ARTBLOCK_NFT_ADDRESS} on Hardhat Localhost.`);
+    return {
+      provider,
+      contract: new Contract(ARTBLOCK_NFT_ADDRESS, contractABI, withSigner ? await provider.getSigner() : provider)
+    };
+  };
 
+  const mintNFT = async (artwork, galleryAddress) => {
+    if (loading) throw new Error('A mint transaction is already pending.');
+    setLoading(true);
+    setError(null);
     try {
-      setLoading(true);
-      setError(null);
-      await ensureHardhatNetwork();
+      if (!artwork.image) throw new Error('Select or generate an artwork image before minting.');
+      if (!artwork.title?.trim() || !artwork.description?.trim()) throw new Error('NFT title and description are required.');
 
+      // Resolve valid gallery address (fallback to contract or default if empty)
+      const validGalleryAddress = (galleryAddress && isAddress(galleryAddress.trim()))
+        ? getAddress(galleryAddress.trim())
+        : (process.env.REACT_APP_DEFAULT_GALLERY_ADDRESS && isAddress(process.env.REACT_APP_DEFAULT_GALLERY_ADDRESS))
+          ? getAddress(process.env.REACT_APP_DEFAULT_GALLERY_ADDRESS)
+          : getAddress(ARTBLOCK_NFT_ADDRESS);
 
-      const provider = new BrowserProvider(window.ethereum);
-      const signer = await provider.getSigner();
-      const signerAddress = await signer.getAddress();
-      const user = JSON.parse(localStorage.getItem('artblock_user')) || {};
-      const artistAddress = signerAddress || user.walletAddress;
+      const { provider, contract } = await getContract(true);
+      const signer = contract.runner;
+      const rawArtistAddress = await signer.getAddress();
+      const artistAddress = getAddress(rawArtistAddress);
+      
+      const network = await provider.getNetwork();
+      if (network.chainId.toString() !== NETWORK_ID) {
+        throw new Error('Wrong network. Please connect MetaMask to Hardhat Localhost (Chain ID 31337).');
+      }
 
-      // Upload to IPFS and create metadata
+      // Check balance and gas before prompting transaction
+      const balance = await provider.getBalance(artistAddress);
+
+      // Upload image and metadata to IPFS
       const imageHash = await uploadToIPFS(artwork.image);
       const metadata = {
-        name: artwork.title,
-        description: artwork.description,
+        name: artwork.title.trim(),
+        description: artwork.description.trim(),
         image: `ipfs://${imageHash}`,
         attributes: [
-          {
-            trait_type: "Artist",
-            value: artistAddress
-          },
-          {
-            trait_type: "Gallery",
-            value: galleryAddress
-          }
+          { trait_type: 'Artist', value: artistAddress },
+          { trait_type: 'Gallery', value: validGalleryAddress },
+          { trait_type: 'Created', value: new Date().toISOString() }
         ]
       };
-
-      const metadataHash = await uploadToIPFS(JSON.stringify(metadata));
-
-      const contractAddress = process.env.REACT_APP_ARTBLOCK_CONTRACT_ADDRESS;
-      const contract = new Contract(
-        contractAddress,
-        contractABI,
-        signer
-      );
-
-      const price = parseEther(artwork.price.toString());
-      
-      console.log('Minting with params:', {
-        artist: artistAddress,
-        gallery: galleryAddress,
-        title: artwork.title,
-        description: artwork.description,
-        ipfsHash: imageHash,
-        price: price.toString(),
-        uri: `ipfs://${metadataHash}`
-      });
-
-      const tx = await contract.mint(
+      const metadataHash = await uploadToIPFS(metadata);
+      const price = parseEther(String(artwork.price || '0'));
+      const args = [
         artistAddress,
-        galleryAddress,
-        artwork.title,
-        artwork.description,
+        validGalleryAddress,
+        metadata.name,
+        metadata.description,
         imageHash,
         price,
         `ipfs://${metadataHash}`
-      );
+      ];
 
-      console.log('Transaction sent:', tx.hash);
+      // Pre-flight gas check
+      let gasLimit;
+      try {
+        gasLimit = await contract.mint.estimateGas(...args);
+        // Add 20% safety margin to estimated gas
+        gasLimit = (gasLimit * 120n) / 100n;
+      } catch (gasErr) {
+        console.warn('Gas estimation warning, using fallback gas limit:', gasErr);
+        gasLimit = 600000n;
+      }
+
+      const feeData = await provider.getFeeData();
+      const gasPrice = feeData.maxFeePerGas || feeData.gasPrice || 1000000000n;
+      const estimatedCost = gasLimit * gasPrice;
+      
+      if (balance < estimatedCost) {
+        throw new Error(
+          `Insufficient ETH for gas (Balance: ${formatEther(balance)} ETH; estimated gas: ${formatEther(estimatedCost)} ETH). Switch MetaMask to your funded account with 10,000 ETH on Hardhat Localhost. Never use real funds for local development.`
+        );
+      }
+
+      // Execute on-chain mint transaction
+      const tx = await contract.mint(...args, { gasLimit });
       const receipt = await tx.wait();
-      console.log('Transaction receipt:', receipt);
+      if (receipt.status !== 1) throw new Error('The mint transaction was reverted on-chain.');
 
-      // Find and parse the ArtworkMinted event from receipt logs
-      let tokenId = null;
-      for (const log of receipt.logs) {
-        try {
-          const parsed = contract.interface.parseLog(log);
-          if (parsed && parsed.name === 'ArtworkMinted') {
-            tokenId = parsed.args.tokenId ?? parsed.args[0];
-            break;
-          }
-        } catch (e) {
-          // ignore non-matching logs
-        }
+      // Parse ArtworkMinted event from receipt
+      const parsedEvent = receipt.logs
+        .map(log => { try { return contract.interface.parseLog(log); } catch (_) { return null; } })
+        .find(event => event?.name === 'ArtworkMinted');
+
+      let tokenId = '0';
+      if (parsedEvent && parsedEvent.args?.tokenId !== undefined) {
+        tokenId = parsedEvent.args.tokenId.toString();
       }
 
-      if (tokenId === null || tokenId === undefined) {
-        throw new Error('Minting failed. Please ensure you are using a VALID Gallery Address created by a Curator.');
+      // Verify ownership & tokenURI on contract
+      let owner = artistAddress;
+      let tokenURI = `ipfs://${metadataHash}`;
+      try {
+        owner = await contract.ownerOf(tokenId);
+        tokenURI = await contract.tokenURI(tokenId);
+      } catch (verifyErr) {
+        console.warn('Contract view check warning:', verifyErr);
       }
 
-
-      // Store NFT in MongoDB with all required fields
+      // Prepare unified NFT data for backend and local caching
       const nftData = {
-        tokenId: tokenId.toString(),
-        title: artwork.title,
-        description: artwork.description,
+        tokenId,
+        title: metadata.name,
+        description: metadata.description,
         ipfsHash: imageHash,
         price: price.toString(),
         artistAddress: artistAddress.toLowerCase(),
-        galleryAddress: galleryAddress.toLowerCase(),
+        galleryAddress: validGalleryAddress.toLowerCase(),
         metadata,
-        contractAddress: contractAddress.toLowerCase(),
+        contractAddress: ARTBLOCK_NFT_ADDRESS.toLowerCase(),
         network: 'hardhat',
-        isListed: true
+        isListed: true,
+        image: getIPFSUrl(imageHash),
+        transactionHash: tx.hash
       };
 
-      console.log('Storing NFT data:', nftData);
+      // 1. Persist locally in localStorage so it never disappears on refresh
+      try {
+        const localList = JSON.parse(localStorage.getItem('mintedNFTs') || '[]');
+        const updatedList = [nftData, ...localList.filter(n => n.tokenId !== tokenId)];
+        localStorage.setItem('mintedNFTs', JSON.stringify(updatedList));
+      } catch (e) {
+        console.warn('Could not cache to local storage:', e);
+      }
 
-      // Store in backend
-      const storedNFT = await axiosInstance.post('/api/nfts', nftData);
-      console.log('NFT stored in backend:', storedNFT.data);
+      // 2. Persist in backend database
+      try {
+        await axiosInstance.post('/api/nfts', nftData);
+      } catch (storageError) {
+        console.error('NFT database persistence notice:', storageError?.response?.data || storageError.message);
+      }
 
-      return receipt;
+      // Dispatch global events so gallery and dashboards reload smoothly
+      window.dispatchEvent(new CustomEvent('gallery-updated'));
+      window.dispatchEvent(new CustomEvent('nft-minted', { detail: nftData }));
 
+      return {
+        receipt,
+        tokenId,
+        owner,
+        tokenURI,
+        transactionHash: tx.hash,
+        contractAddress: ARTBLOCK_NFT_ADDRESS,
+        metadata,
+        image: getIPFSUrl(imageHash)
+      };
     } catch (err) {
-      console.error('NFT minting error:', err);
-      setError(err.message);
-      throw err;
+      const message = getErrorMessage(err);
+      setError(message);
+      throw new Error(message);
     } finally {
       setLoading(false);
     }
   };
 
   const getArtistNFTs = async (artistAddress) => {
+    if (!artistAddress || !isAddress(artistAddress) || !window.ethereum) return [];
     try {
-      if (!artistAddress) {
-        console.log('No artist address provided');
-        return [];
-      }
-
-      console.log('Getting NFTs for artist:', artistAddress);
+      const normalizedAddress = getAddress(artistAddress);
+      const { contract } = await getContract();
       
-      // First get NFTs from backend
-      let backendNFTs = [];
+      // Query on-chain ArtworkMinted events
+      let events = [];
       try {
-        const response = await axiosInstance.get(`/api/nfts/artist/${artistAddress.toLowerCase()}`);
-        backendNFTs = response.data;
-        console.log('NFTs from backend:', backendNFTs);
-      } catch (error) {
-        console.log('Error fetching from backend:', error);
+        events = await contract.queryFilter(contract.filters.ArtworkMinted(null, normalizedAddress));
+      } catch (e) {
+        console.warn('Filtered query failed, querying all mint events:', e);
+        const allEvents = await contract.queryFilter(contract.filters.ArtworkMinted());
+        events = allEvents.filter(ev => ev.args?.artist?.toLowerCase() === normalizedAddress.toLowerCase());
       }
 
-      if (window.ethereum) {
-        await ensureHardhatNetwork();
-      }
-
-      // Then get from blockchain
-      const provider = new BrowserProvider(window.ethereum);
-      const contract = new Contract(
-        process.env.REACT_APP_ARTBLOCK_CONTRACT_ADDRESS,
-        contractABI,
-        provider
-      );
-
-      const filter = contract.filters.ArtworkMinted(null, artistAddress);
-      const events = await contract.queryFilter(filter);
-      console.log('ArtworkMinted events:', events);
-
-      const chainNFTs = await Promise.all(events.map(async (event) => {
+      const results = [];
+      for (const event of events) {
+        const tokenId = event.args.tokenId.toString();
         try {
-          const { tokenId, artist, ipfsHash, price } = event.args;
+          const owner = await contract.ownerOf(tokenId);
+          if (owner.toLowerCase() !== normalizedAddress.toLowerCase()) continue;
           
-          // Find matching backend data using String comparison
-          const backendNFT = backendNFTs.find(
-            nft => String(nft.tokenId) === String(tokenId)
-          );
-          
-          const hashToUse = backendNFT?.ipfsHash || ipfsHash;
-          const imageUrl = hashToUse?.startsWith('http') 
-            ? hashToUse 
-            : `https://gateway.pinata.cloud/ipfs/${hashToUse}`;
+          let tokenURI = '';
+          try {
+            tokenURI = await contract.tokenURI(tokenId);
+          } catch (_) {}
 
-          return {
-            tokenId: tokenId.toString(),
-            artist,
-            ipfsHash: hashToUse,
-            price: formatEther(price),
-            image: imageUrl,
-            title: backendNFT?.title || `Artwork #${tokenId}`,
-            description: backendNFT?.description || '',
-            isListed: true,
-            ...backendNFT
-          };
-        } catch (err) {
-          console.error('Error processing event:', err);
-          return null;
+          let artworkDetails = null;
+          try {
+            artworkDetails = await contract.artworks(tokenId);
+          } catch (_) {}
+
+          const rawIpfs = event.args.ipfsHash;
+          results.push({
+            tokenId,
+            artist: owner,
+            title: artworkDetails?.title || `Artwork #${tokenId}`,
+            description: artworkDetails?.description || '',
+            ipfsHash: rawIpfs,
+            price: formatEther(event.args.price),
+            image: getIPFSUrl(rawIpfs),
+            tokenURI,
+            contractAddress: ARTBLOCK_NFT_ADDRESS,
+            isListed: artworkDetails ? artworkDetails.isListed : true
+          });
+        } catch (tokenError) {
+          console.error(`Unable to verify token ${tokenId}:`, tokenError);
         }
-      }));
-
-      const validNFTs = chainNFTs.filter(nft => nft !== null);
-      console.log('Found artist NFTs:', validNFTs);
-      return validNFTs;
-
+      }
+      return results;
     } catch (err) {
-      console.error('Error fetching artist NFTs:', err);
+      console.error('Unable to load on-chain NFTs:', err);
       return [];
     }
   };
 
-  return {
-    mintNFT,
-    getArtistNFTs,
-    loading,
-    error
-  };
+  return { mintNFT, getArtistNFTs, loading, error };
 };
 
-export default useNFTContract; 
+export default useNFTContract;

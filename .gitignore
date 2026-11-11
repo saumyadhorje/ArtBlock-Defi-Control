@@ -33,3 +33,19 @@ ignition/deployments/chain-31337
 *.env.local
 *.env.development
 *.env.production
+
+# Local Anvil blockchain state
+/anvil-state.json
+/anvil.state*.json
+/anvil.state*.json.before-recovery
+
+# Local backups
+*.bak
+*.backup
+/auth-backup-before-wallet-link/
+
+# Local Anvil state backups
+*.jason
+
+# Misspelled local Anvil state backups
+/anvil.state.jason*

@@ -1,5 +1,5 @@
 import NFT from '../models/nft.model.js';
-import Gallery from '../models/gallery.model.js';
+import Gallery from '../models/Gallery.js';
 import { ethers } from 'ethers';
 import contractABI from '../contracts/ArtBlockNFT.json';
 

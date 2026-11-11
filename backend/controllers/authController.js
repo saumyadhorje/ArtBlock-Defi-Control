@@ -76,27 +76,36 @@ export const login = async (req, res) => {
             return res.status(400).json({ message: 'Password is required' });
         }
 
-        // Find user in either User or Curator collection
-        let user = await User.findOne({ 
-            $or: [
-                { username: username?.toLowerCase() }, 
-                { walletAddress: walletAddress?.toLowerCase() }
-            ]
-        });
-
-        if (!user) {
-            user = await Curator.findOne({ 
-                $or: [
-                    { username: username?.toLowerCase() }, 
-                    { walletAddress: walletAddress?.toLowerCase() }
-                ]
-            });
+        // Build query conditions: allow searching by username or by walletAddress
+        const queryConditions = [];
+        if (username && username.trim()) {
+            queryConditions.push({ username: username.trim().toLowerCase() });
+        }
+        if (walletAddress && walletAddress.trim()) {
+            queryConditions.push({ walletAddress: walletAddress.trim().toLowerCase() });
         }
 
-        console.log('Found user:', user ? 'Yes' : 'No'); // Debug log
+        if (queryConditions.length === 0) {
+            return res.status(400).json({ message: 'Username or wallet address is required' });
+        }
+
+        // Find user in either User or Curator collection
+        let user = await User.findOne({ $or: queryConditions });
+        let isCurator = false;
 
         if (!user) {
-            return res.status(401).json({ message: 'User not found' });
+            user = await Curator.findOne({ $or: queryConditions });
+            if (user) isCurator = true;
+        }
+
+        console.log('Found user:', user ? `${user.username} (${user.role})` : 'No'); // Debug log
+
+        if (!user) {
+            return res.status(401).json({ 
+                message: username 
+                    ? `Account '${username}' not found. Check your username or sign up for a new account.`
+                    : `No account linked to wallet ${walletAddress ? walletAddress.slice(0, 6) + '...' + walletAddress.slice(-4) : ''}. Enter your username (e.g. pq) to sign in, or click 'Sign up'.`
+            });
         }
 
         // Verify password exists in user document
@@ -111,10 +120,23 @@ export const login = async (req, res) => {
             return res.status(401).json({ message: 'Invalid password' });
         }
 
+        // If user logged in by username and connected a new funded wallet, link the new wallet to this user!
+        if (walletAddress && walletAddress.trim() && user.walletAddress !== walletAddress.trim().toLowerCase()) {
+            const newWallet = walletAddress.trim().toLowerCase();
+            console.log(`Updating wallet for user '${user.username}' from ${user.walletAddress} to ${newWallet}`);
+            
+            // Ensure new wallet is not taken by another user
+            const existingWalletUser = await User.findOne({ walletAddress: newWallet, _id: { $ne: user._id } });
+            if (!existingWalletUser) {
+                user.walletAddress = newWallet;
+                await user.save();
+            }
+        }
+
         // Generate JWT
         const token = jwt.sign(
             { 
-                userId: user._id,
+                userId: user._id, 
                 role: user.role 
             },
             process.env.JWT_SECRET,

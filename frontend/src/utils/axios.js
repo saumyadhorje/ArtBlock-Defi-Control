@@ -2,46 +2,24 @@ import axios from 'axios';
 import { LOCAL_STORAGE_KEYS } from './auth';
 
 const axiosInstance = axios.create({
-  baseURL: 'http://localhost:5000',
-  headers: {
-    'Content-Type': 'application/json'
-  }
+  //baseURL: process.env.REACT_APP_AUTH_SERVICE_URL || 'http://localhost:5000',
+  baseURL: (process.env.REACT_APP_AUTH_SERVICE_URL || 'http://localhost:5000')
+  .replace(/\/api\/?$/, ''),
+  headers: { 'Content-Type': 'application/json' }
 });
 
-
-axiosInstance.interceptors.request.use(
-  (config) => {
-    const token = localStorage.getItem(LOCAL_STORAGE_KEYS.TOKEN);
-    console.log(' Request Config:', {
-      url: config.url,
-      hasToken: !!token,
-      tokenPreview: token ? `${token.substring(0, 20)}...` : 'none'
-    });
-
-    if (token) {
-      config.headers.Authorization = token.startsWith('Bearer ')
-        ? token
-        : `Bearer ${token}`;
-    }
-    return config;
-  },
-  (error) => {
-    console.error('Request Error:', error);
-    return Promise.reject(error);
-  }
-);
-
+axiosInstance.interceptors.request.use((config) => {
+  const token = localStorage.getItem(LOCAL_STORAGE_KEYS.TOKEN);
+  if (token) config.headers.Authorization = token.startsWith('Bearer ') ? token : `Bearer ${token}`;
+  return config;
+});
 
 axiosInstance.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    if (error.response?.status === 401) {
-      // we fucking dont wanna redirect to auth page
-      localStorage.clear();
-     
-    }
+  response => response,
+  error => {
+    if (error.response?.status === 401) localStorage.removeItem(LOCAL_STORAGE_KEYS.TOKEN);
     return Promise.reject(error);
   }
 );
 
-export default axiosInstance; 
+export default axiosInstance;

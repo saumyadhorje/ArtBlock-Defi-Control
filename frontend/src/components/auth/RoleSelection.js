@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import { setUserSession } from '../../utils/auth';
 import axiosInstance from '../../utils/axios';
 import gsap from 'gsap';
 
@@ -193,7 +194,7 @@ const RoleCard = ({ title, description, icon, benefits, onClick, isSelected, ima
 const RoleSelection = () => {
   const [selectedRole, setSelectedRole] = useState(null);
   const navigate = useNavigate();
-  const { userRole, saveUserRole, setUserSession } = useAuth();
+  const { userRole, saveUserRole } = useAuth();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 

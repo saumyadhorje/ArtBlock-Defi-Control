@@ -1,288 +1,369 @@
-import React, { useState, useEffect } from 'react';
+
+import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { 
-  Search, Filter, Users, Image as ImageIcon, 
-  DollarSign, Trending, Award
-} from 'react-feather';
-import { useNavigate } from 'react-router-dom';
-import axiosInstance from '../utils/axios';
+import { Search, ShoppingCart, RefreshCw, Image as ImageIcon } from 'react-feather';
 import { ethers } from 'ethers';
+import { toast } from 'react-hot-toast';
 
-// Array of retro-futuristic NFT art images for gallery covers
-const GALLERY_IMAGES = [
-  // Cyberpunk / Retro-futuristic Art imported from unsplash lmao 
-  'https://images.unsplash.com/photo-1634973357973-f2ed2657db3c?q=80&w=2070', // Neon city
-  'https://images.unsplash.com/photo-1592492152545-9695d3f473f4?q=80&w=2070', // Digital landscape
-  'https://images.unsplash.com/photo-1558244661-d248897f7bc4?q=80&w=2070', // Abstract tech
-  'https://images.unsplash.com/photo-1620641788421-7a1c342ea42e?q=80&w=2070', // Digital art
-  'https://images.unsplash.com/photo-1618005198919-d3d4b5a92ead?q=80&w=2070', // Geometric abstract
-  'https://images.unsplash.com/photo-1633355444132-695d5876cd00?q=80&w=2070', // Cyber aesthetic
-  'https://images.unsplash.com/photo-1604871000636-074fa5117945?q=80&w=2070', // Digital waves
- 
-];
+import axiosInstance from '../utils/axios';
+import { ARTBLOCK_NFT_ADDRESS } from '../config';
+import { contractABI } from '../constants/contractABI';
+import { ensureHardhatNetwork } from '../utils/network';
+import { getIPFSUrl } from '../utils/ipfs';
 
-const getRandomImage = () => {
-  return GALLERY_IMAGES[Math.floor(Math.random() * GALLERY_IMAGES.length)];
-};
-
-const formatEthValue = (value) => {
-  if (!value) return '0';
-  // If the value is already a string and contains 'ETH', return as is
-  if (typeof value === 'string' && value.includes('ETH')) return value;
-  
+const formatPrice = (price) => {
   try {
-    // Convert to proper ETH value
-    const ethValue = ethers.formatEther(value.toString());
-    // Format to max 2 decimal places if it's a small number
-    return parseFloat(ethValue).toFixed(2);
+    if (price === undefined || price === null) return '0.0000';
+
+    const value = String(price);
+    const wei = value.includes('.') ? ethers.parseEther(value) : ethers.toBigInt(value);
+
+    return Number(ethers.formatEther(wei)).toFixed(4);
   } catch (error) {
-    console.error('Error formatting ETH value:', error);
-    return value;
+    console.error('Price formatting error:', error);
+    return '0.0000';
   }
 };
 
 const Galleries = () => {
-  const navigate = useNavigate();
-  const [galleries, setGalleries] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState('all');
-  const [searchTerm, setSearchTerm] = useState('');
+  const [nfts, setNfts] = useState([]);
+const [loading, setLoading] = useState(true);
+const [searchTerm, setSearchTerm] = useState('');
+const [purchasingId, setPurchasingId] = useState(null);
 
-  useEffect(() => {
-    fetchGalleries();
-  }, []);
+const [activeTab, setActiveTab] = useState('marketplace');
+const [purchasedNfts, setPurchasedNfts] = useState([]);
+const [purchasedLoading, setPurchasedLoading] = useState(false);
 
-  const fetchGalleries = async () => {
+  const fetchNFTs = async () => {
+    setLoading(true);
+
     try {
-      const response = await axiosInstance.get('/api/curator/galleries');
-      console.log('Fetched galleries:', response.data);
-      setGalleries(response.data.galleries || []);
+      const response = await axiosInstance.get('/api/nfts/marketplace');
+
+      console.log('Marketplace NFTs:', response.data);
+
+      setNfts(Array.isArray(response.data) ? response.data : []);
     } catch (error) {
-      console.error('Error fetching galleries:', error);
+      console.error('Marketplace fetch error:', error);
+      toast.error('Could not load marketplace NFTs');
+      setNfts([]);
     } finally {
       setLoading(false);
     }
   };
+  const fetchPurchasedNFTs = async () => {
+    try {
+      if (!window.ethereum) {
+        toast.error('Please install MetaMask');
+        return;
+      }
 
-  const formatAddress = (address) => {
-    return `${address.slice(0, 6)}...${address.slice(-4)}`;
-  };
+      setPurchasedLoading(true);
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-[#0A0A0A] flex items-center justify-center">
-        <motion.div
-          animate={{ rotate: 360 }}
-          transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-          className="w-16 h-16 border-4 border-[#6366F1] rounded-full border-t-transparent"
-        />
-      </div>
+      const accounts = await window.ethereum.request({
+        method: 'eth_requestAccounts'
+      });
+
+      if (!accounts || accounts.length === 0) {
+        toast.error('Please connect your buyer wallet');
+        return;
+      }
+
+      const address = accounts[0].toLowerCase();
+
+      const response = await axiosInstance.get(
+        `/api/nfts/purchased/${address}`
+      );
+
+      setPurchasedNfts(
+        Array.isArray(response.data) ? response.data : []
+      );
+
+      console.log('My purchased NFTs:', response.data);
+
+    } catch (error) {
+      console.error('Purchase history error:', error);
+      toast.error('Could not load your purchases');
+    } finally {
+      setPurchasedLoading(false);
+    }
+  }; //55-91
+  useEffect(() => {
+    fetchNFTs();
+  }, []);
+
+  const handlePurchase = async (nft) => {
+    let blockchainConfirmed = false;
+  try {
+    if (!window.ethereum) {
+      toast.error('Please install or unlock MetaMask');
+      return;
+    }
+
+    if (nft.tokenId === undefined || nft.tokenId === null) {
+      toast.error('NFT token ID is missing');
+      return;
+    }
+
+    setPurchasingId(nft._id);
+
+    await ensureHardhatNetwork();
+
+    const provider = new ethers.BrowserProvider(window.ethereum);
+    await provider.send('eth_requestAccounts', []);
+
+    const signer = await provider.getSigner();
+    const signerAddress = await signer.getAddress();
+
+    console.log('Buyer wallet:', signerAddress);
+    console.log('NFT being purchased:', nft);
+
+    const rawPrice = String(nft.price);
+    const priceInWei = rawPrice.includes('.')
+      ? ethers.parseEther(rawPrice)
+      : ethers.toBigInt(rawPrice);
+
+    const contract = new ethers.Contract(
+      ARTBLOCK_NFT_ADDRESS,
+      contractABI,
+      signer
+    );
+
+    toast.loading('Confirm the purchase in MetaMask...', {
+      id: 'nft-purchase'
+    });
+
+    const tx = await contract.buyArtwork(Number(nft.tokenId), {
+      value: priceInWei
+    });
+
+    toast.loading('Waiting for blockchain confirmation...', {
+      id: 'nft-purchase'
+    });
+
+    const receipt = await tx.wait();
+
+    if (receipt.status !== 1) {
+      throw new Error('Blockchain transaction failed');
+    }
+    blockchainConfirmed = true;
+
+// Sync the confirmed purchase with MongoDB
+await axiosInstance.post(`/api/nfts/${nft.tokenId}/purchase-sync`, {
+  buyer: signerAddress,
+  transactionHash: receipt.hash,
+  price: priceInWei.toString()
+});
+
+    console.log('Purchase confirmed:', receipt.hash);
+
+    toast.success('NFT purchased successfully!', {
+      id: 'nft-purchase'
+    });
+
+    // Remove the purchased NFT from the marketplace.
+    setNfts(prev => prev.filter(item => item._id !== nft._id));
+
+ } catch (error) {
+  console.error('Purchase error:', error);
+
+  if (blockchainConfirmed) {
+    // Blockchain purchase succeeded, but database sync failed.
+    setNfts(prev => prev.filter(item => item._id !== nft._id));
+
+    toast.error(
+      'Purchase succeeded on blockchain, but marketplace sync failed. Do not purchase again.',
+      { id: 'nft-purchase' }
+    );
+  } else {
+    toast.error(
+      error.reason || error.shortMessage || error.message || 'Purchase failed',
+      { id: 'nft-purchase' }
     );
   }
 
-  return (
-    <div className="min-h-screen bg-[#0A0A0A] relative overflow-hidden">
-      {/* RetroBeams Background */}
-      <motion.div 
-        className="fixed inset-0 overflow-hidden pointer-events-none"
-        style={{ zIndex: 0 }}
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ duration: 1.5 }}
-      >
-        <div 
-          className="absolute inset-0"
-          style={{
-            backgroundImage: `
-              linear-gradient(to right, rgba(147, 197, 253, 0.07) 1px, transparent 1px),
-              linear-gradient(to bottom, rgba(147, 197, 253, 0.07) 1px, transparent 1px)
-            `,
-            backgroundSize: '100px 100px'
-          }}
-        />
-      </motion.div>
+  } finally {
+    setPurchasingId(null);
+  }
+};
 
-      {/* Hero Section */}
-      <div className="relative z-10 border-b border-white/10 backdrop-blur-lg">
-        <div className="max-w-7xl mx-auto px-4 py-12">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="space-y-6"
-          >
-            <motion.div
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              className="inline-block"
-            >
-              <span className="px-6 py-2 bg-[#6366F1]/10 border border-[#6366F1]/40 
-                rounded-xl text-[#6366F1] text-base font-bold inline-block"
-              >
-                Explore Galleries 
-              </span>
-            </motion.div>
-            <h1 className="text-5xl md:text-6xl font-black text-white 
-              font-['Space_Grotesk']"
-            >
-              Discover Amazing<br />Art Collections
-            </h1>
-          </motion.div>
+  const displayedNFTs =
+  activeTab === 'marketplace' ? nfts : purchasedNfts;
+
+const filteredNFTs = displayedNFTs.filter((nft) =>
+  (nft.title || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+  String(nft.tokenId).includes(searchTerm)
+);
+
+  return (
+    <div className="min-h-screen bg-[#0A0A0A] text-white">
+      <div className="border-b border-white/10">
+        <div className="max-w-7xl mx-auto px-6 py-14">
+          <span className="inline-block px-5 py-2 rounded-xl bg-[#6366F1]/10 border border-[#6366F1]/40 text-[#818CF8] font-bold mb-6">
+            ARTBLOCK MARKETPLACE
+          </span>
+
+          <h1 className="text-5xl md:text-6xl font-black font-['Space_Grotesk']">
+            Discover Digital Art
+          </h1>
+
+          <p className="text-white/60 mt-4 text-lg">
+            Explore and collect artworks directly from their artists.
+          </p>
+
+          <p className="text-white/40 mt-2">
+            {nfts.length} listed artwork{nfts.length === 1 ? '' : 's'} available
+          </p>
         </div>
       </div>
 
-      <div className="relative z-10 max-w-7xl mx-auto px-4 py-12">
-        {/* Search and Filter Section */}
-        <div className="mb-12 space-y-6">
-          <div className="flex flex-wrap gap-6 items-center justify-between">
-            {/* Search Bar */}
-            <div className="relative flex-grow max-w-md">
-              <input
-                type="text"
-                placeholder="Search galleries..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full px-6 py-4 bg-white/[0.02] border border-white/10 
-                  rounded-xl backdrop-blur-lg text-white placeholder-white/40 
-                  focus:border-[#6366F1]/40 focus:ring-[#6366F1]/40 transition-all 
-                  duration-300 outline-none pl-12 font-['Space_Grotesk']"
-              />
-              <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 
-                text-white/40" 
-              />
-            </div>
+      <div className="max-w-7xl mx-auto px-6 py-10">
+      <div className="flex gap-3 mb-8">
+  <button
+    onClick={() => {
+      setActiveTab('marketplace');
+      setSearchTerm('');
+    }}
+    className={`px-6 py-3 rounded-xl font-bold transition ${
+      activeTab === 'marketplace'
+        ? 'bg-[#6366F1] text-white'
+        : 'bg-white/5 text-white/60 border border-white/10'
+    }`}
+  >
+    <ShoppingCart size={16} className="inline mr-2" />
+    Marketplace ({nfts.length})
+  </button>
 
-            {/* Filter Buttons */}
-            <div className="flex gap-4">
-              {['all', 'trending', 'new', 'featured'].map((status) => (
-                <motion.button
-                  key={status}
-                  onClick={() => setFilter(status)}
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  className={`px-6 py-3 rounded-xl font-bold capitalize backdrop-blur-lg
-                    transition-all duration-300 font-['Space_Grotesk'] ${
-                    filter === status 
-                      ? 'bg-[#6366F1] text-white' 
-                      : 'bg-white/[0.02] border border-white/10 text-white/60 hover:text-white'
-                  }`}
-                >
-                  {status}
-                </motion.button>
-              ))}
-            </div>
+  <button
+    onClick={() => {
+      setActiveTab('purchases');
+      setSearchTerm('');
+      fetchPurchasedNFTs();
+    }}
+    className={`px-6 py-3 rounded-xl font-bold transition ${
+      activeTab === 'purchases'
+        ? 'bg-[#6366F1] text-white'
+        : 'bg-white/5 text-white/60 border border-white/10'
+    }`}
+  >
+    My Purchases ({purchasedNfts.length})
+  </button>
+</div>
+        <div className="flex flex-wrap gap-4 justify-between items-center mb-10">
+          <div className="relative w-full md:max-w-md">
+            <Search
+              className="absolute left-4 top-1/2 -translate-y-1/2 text-white/40"
+              size={19}
+            />
+            <input
+              type="text"
+              placeholder="Search artworks or token IDs..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-12 pr-5 py-4 bg-white/[0.03] border border-white/10 rounded-xl text-white outline-none focus:border-[#6366F1]"
+            />
           </div>
+
+          <button
+           onClick={activeTab === 'marketplace' ? fetchNFTs : fetchPurchasedNFTs}
+            disabled={activeTab === 'marketplace' ? loading : purchasedLoading}
+            className="flex items-center gap-2 px-5 py-3 rounded-xl border border-white/10 hover:bg-white/10 disabled:opacity-50"
+          >
+            <RefreshCw size={17} />
+            Refresh
+          </button>
         </div>
 
-        {/* Galleries Grid */}
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-8">
-          {galleries
-            .filter(gallery => 
-              gallery.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-              gallery.curator.toLowerCase().includes(searchTerm.toLowerCase())
-            )
-            .map((gallery) => (
+       {(activeTab === 'marketplace' ? loading : purchasedLoading) ? (
+          <div className="flex justify-center py-24">
+            <div className="w-12 h-12 border-4 border-[#6366F1] border-t-transparent rounded-full animate-spin" />
+          </div>
+        ) : filteredNFTs.length === 0 ? (
+          <div className="text-center py-24 border border-white/10 rounded-2xl">
+            <ImageIcon size={48} className="mx-auto text-white/30 mb-5" />
+            <h2 className="text-2xl font-bold">
+             {displayedNFTs.length === 0
+  ? activeTab === 'marketplace'
+    ? 'No artworks listed yet'
+    : 'No purchases yet'
+  : 'No matching artworks'}
+            </h2>
+            <p className="text-white/50 mt-3">
+             {displayedNFTs.length === 0
+  ? activeTab === 'marketplace'
+    ? 'Listed artworks will appear here.'
+    : 'Your purchased artworks will appear here.'
+  : 'Try another search term.'}
+            </p>
+          </div>
+        ) : (
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-8">
+            {filteredNFTs.map((nft) => (
               <motion.div
-                key={gallery._id}
-                whileHover={{ scale: 1.02 }}
-                className="bg-white/[0.02] border border-white/10 rounded-2xl 
-                  overflow-hidden backdrop-blur-lg hover:border-[#6366F1]/40 
-                  transition-all cursor-pointer group"
-                onClick={() => navigate(`/gallery/${gallery._id}`)}
+                key={nft._id}
+                whileHover={{ y: -5 }}
+                className="bg-white/[0.03] border border-white/10 rounded-2xl overflow-hidden hover:border-[#6366F1]/50 transition-colors"
               >
-                {/* Gallery Cover Image */}
-                <div className="aspect-[4/3] bg-black/20 relative overflow-hidden">
+                <div className="aspect-square bg-black relative">
                   <img
-                    src={gallery.coverImage || getRandomImage()}
-                    alt={gallery.name}
-                    className="w-full h-full object-cover group-hover:scale-110 
-                      transition-transform duration-500"
+                    src={getIPFSUrl(nft.ipfsHash)}
+                    alt={nft.title || 'NFT artwork'}
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      e.currentTarget.style.display = 'none';
+                    }}
                   />
-                  <div className="absolute top-4 right-4 bg-black/50 backdrop-blur-sm 
-                    px-3 py-1 rounded-lg text-sm font-bold text-white border 
-                    border-white/10"
-                  >
-                    {gallery.nftCount} NFTs
-                  </div>
+
+                  <span className="absolute top-4 right-4 px-3 py-1 bg-black/70 rounded-lg text-xs font-bold border border-white/10">
+                    TOKEN #{nft.tokenId}
+                  </span>
                 </div>
 
-                {/* Gallery Info */}
-                <div className="p-6 space-y-4">
-                  <h3 className="text-xl font-bold text-white line-clamp-1 
-                    font-['Space_Grotesk']"
-                  >
-                    {gallery.name}
+                <div className="p-6">
+                  <h3 className="text-xl font-bold truncate">
+                    {nft.title || `Artwork #${nft.tokenId}`}
                   </h3>
-                  <p className="text-white/60 text-sm line-clamp-2 
-                    font-['Plus_Jakarta_Sans']"
-                  >
-                    {gallery.description || "A unique collection of digital artworks"}
+
+                  <p className="text-white/50 text-sm mt-2 line-clamp-2">
+                    {nft.description || 'Digital artwork on ArtBlock.'}
                   </p>
 
-                  {/* Stats Row */}
-                  <div className="grid grid-cols-3 gap-2 pt-2">
-                    {[
-                      { label: 'Artists', value: gallery.artistCount },
-                      { label: 'Volume', value: `${formatEthValue(gallery.totalVolume)} ETH` },
-                      { label: 'Floor', value: `${formatEthValue(gallery.floorPrice)} ETH` }
-                    ].map((stat, index) => (
-                      <div key={index} className="text-center p-2 bg-white/[0.02] 
-                        rounded-lg border border-white/10"
-                      >
-                        <div className="text-sm text-white/60 
-                          font-['Plus_Jakarta_Sans']"
-                        >
-                          {stat.label}
-                        </div>
-                        <div className="font-bold text-white font-['Space_Grotesk']">
-                          {stat.value}
-                        </div>
-                      </div>
-                    ))}
+                  <div className="flex justify-between items-center mt-6 pt-5 border-t border-white/10">
+                    <div>
+                      <p className="text-xs text-white/40">PRICE</p>
+                      <p className="text-xl font-black text-[#A5B4FC]">
+                        {formatPrice(nft.price)} ETH
+                      </p>
+                    </div>
+
+                   {activeTab === 'marketplace' ? (
+  <button
+    onClick={() => handlePurchase(nft)}
+    disabled={purchasingId !== null}
+    className="flex items-center gap-2 px-5 py-3 bg-[#6366F1] hover:bg-[#5457E5] rounded-xl font-bold disabled:opacity-50 disabled:cursor-not-allowed"
+  >
+    <ShoppingCart size={17} />
+    {purchasingId === nft._id ? 'Buying...' : 'Buy'}
+  </button>
+) : (
+  <span className="px-5 py-3 bg-green-500/10 text-green-400 border border-green-500/30 rounded-xl font-bold">
+    ✓ OWNED
+  </span>
+)}
                   </div>
 
-                  {/* Curator Info */}
-                  <div className="flex items-center justify-between pt-4 
-                    border-t border-white/10"
-                  >
-                    <div className="flex items-center gap-2">
-                      <div className="p-2 bg-[#6366F1]/10 rounded-full">
-                        <Users size={16} className="text-[#6366F1]" />
-                      </div>
-                      <div>
-                        <div className="text-sm font-bold text-white 
-                          font-['Space_Grotesk']"
-                        >
-                          Curator
-                        </div>
-                        <div className="text-sm text-white/60 
-                          font-['Plus_Jakarta_Sans']"
-                        >
-                          {gallery.curator || formatAddress(gallery.curatorAddress)}
-                        </div>
-                      </div>
-                    </div>
-                    {gallery.verified && (
-                      <Award className="text-[#6366F1]" />
-                    )}
-                  </div>
+                  <p className="text-xs text-white/30 mt-4 truncate">
+                    Artist: {nft.artistAddress || 'Unknown'}
+                  </p>
                 </div>
               </motion.div>
             ))}
-        </div>
+          </div>
+        )}
       </div>
-
-      {/* Background Decoration */}
-      <motion.div
-        animate={{ 
-          rotate: [0, 360],
-          scale: [1, 1.2, 1],
-        }}
-        transition={{ duration: 20, repeat: Infinity, repeatType: "reverse" }}
-        className="fixed top-0 right-0 w-96 h-96 bg-[#6366F1]/10 
-          rounded-full blur-3xl -z-10"
-      />
     </div>
   );
 };
 
-export default Galleries; 
+export default Galleries;

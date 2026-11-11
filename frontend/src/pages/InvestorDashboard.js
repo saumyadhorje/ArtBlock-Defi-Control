@@ -107,14 +107,15 @@ const InvestorDashboard = () => {
             portfolioValue: data.analytics?.portfolioValue || 0
           },
           portfolio: {
-            investments: data.portfolio?.ownedNFTs || [],
+            //investments: data.portfolio?.ownedNFTs || [],
+            investments: data.portfolio?.investments || [],
             loading: false,
             error: null
           }
         }));
 
-        if (data.portfolio?.ownedNFTs?.length > 0) {
-          setPortfolioDistribution(data.portfolio.ownedNFTs.map((nft, index) => ({
+        if (data.portfolio?.investments?.length > 0) {
+  setPortfolioDistribution(data.portfolio.investments.map((nft, index) => ({
             name: nft.name || `Investment ${index + 1}`,
             value: nft.currentPrice || 0
           })));

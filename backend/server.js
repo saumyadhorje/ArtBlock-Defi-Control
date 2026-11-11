@@ -41,8 +41,8 @@ aiApp.use('/api', aiImageRoutes);
 authApp.use('/api/auth', authRoutes);
 authApp.use('/api/artist', artistRoutes);
 authApp.use('/api/curator', curatorRoutes);
-authApp.use('/api', galleryRoutes);
 authApp.use('/api', nftRoutes);
+authApp.use('/api', galleryRoutes);
 authApp.use('/api/investor', investorRoutes);
 
 // MongoDB connection

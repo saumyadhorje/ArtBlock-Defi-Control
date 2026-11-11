@@ -21,6 +21,7 @@ import { useNavigate } from 'react-router-dom';
 // were using wallet connection hook to listen for wallet connection changes. if disconnected user will be redirected to auth page
 import useWalletConnection from '../hooks/useWalletConnection';
 import useNFTContract from '../hooks/useNFTContract';
+import { getIPFSUrl } from '../utils/ipfs';
 import { ethers } from 'ethers';
 import { formatEther } from 'ethers';
 
@@ -89,15 +90,28 @@ const ArtistDashboard = () => {
           secondaryNFTs = await getArtistNFTs(activeWallet);
         }
         
-        // Merge and deduplicate NFTs by tokenId
+        // Merge on-chain NFTs and locally minted cached NFTs by tokenId
         const nftsFromChainMap = new Map();
         [...primaryNFTs, ...secondaryNFTs].forEach(nft => {
           if (nft && nft.tokenId) {
             nftsFromChainMap.set(nft.tokenId.toString(), nft);
           }
         });
+
+        // Also merge local storage mintedNFTs so freshly minted art is immediately visible
+        try {
+          const localNFTs = JSON.parse(localStorage.getItem('mintedNFTs') || '[]');
+          localNFTs.forEach(nft => {
+            if (nft && nft.tokenId && !nftsFromChainMap.has(nft.tokenId.toString())) {
+              nftsFromChainMap.set(nft.tokenId.toString(), nft);
+            }
+          });
+        } catch (e) {
+          console.warn('Error reading local NFTs:', e);
+        }
+
         const nftsFromChain = Array.from(nftsFromChainMap.values());
-        console.log('NFTs from blockchain:', nftsFromChain);
+        console.log('NFTs from blockchain & local storage:', nftsFromChain);
 
         if (!mounted) return;
 
@@ -338,7 +352,7 @@ const ArtistDashboard = () => {
       });
       
       const formattedPrice = formatPrice(nft.price);
-      const imageUrl = nft.image || (nft.ipfsHash?.startsWith('http') ? nft.ipfsHash : `https://gateway.pinata.cloud/ipfs/${nft.ipfsHash}`);
+      const imageUrl = nft.image ? getIPFSUrl(nft.image) : getIPFSUrl(nft.ipfsHash);
       
       return {
         _id: nft.tokenId.toString(),

@@ -66,5 +66,69 @@ router.post('/public/ai-hash', async (req, res) => {
     }
   }
 });
+// Generate an AI image using Pollinations
+router.post('/public/generate-image', async (req, res) => {
+  try {
+    const { prompt, style = '' } = req.body;
 
+    if (!prompt || typeof prompt !== 'string' || !prompt.trim()) {
+      return res.status(400).json({ error: 'A prompt is required.' });
+    }
+
+    const apiKey = process.env.POLLINATIONS_API_KEY;
+
+    if (!apiKey) {
+      return res.status(500).json({
+        error: 'Pollinations API key is not configured on the server.'
+      });
+    }
+
+    const finalPrompt = style
+      ? `${prompt.trim()}, ${style} style`
+      : prompt.trim();
+
+    const imageUrl =
+      `https://gen.pollinations.ai/image/${encodeURIComponent(finalPrompt)}` +
+      '?model=flux&width=1024&height=1024';
+
+    const response = await fetch(imageUrl, {
+      headers: {
+        Authorization: `Bearer ${apiKey}`
+      },
+      signal: AbortSignal.timeout(120000)
+    });
+
+    if (!response.ok) {
+      const details = await response.text();
+      console.error('Pollinations image error:', response.status, details);
+
+      return res.status(response.status).json({
+        error: `Image provider returned status ${response.status}.`
+      });
+    }
+
+    const contentType = response.headers.get('content-type') || '';
+
+    if (!contentType.startsWith('image/')) {
+      return res.status(502).json({
+        error: 'The image provider returned an invalid response.'
+      });
+    }
+
+    const imageBuffer = Buffer.from(await response.arrayBuffer());
+
+    const imageDataUrl =
+      `data:${contentType};base64,${imageBuffer.toString('base64')}`;
+
+    res.json({ imageUrl: imageDataUrl });
+  } catch (error) {
+    console.error('Image generation failed:', error.message);
+
+    res.status(500).json({
+      error: error.name === 'TimeoutError'
+        ? 'Image generation timed out. Please try again.'
+        : 'Image generation failed. Please try again.'
+    });
+  }
+});
 export default router; 

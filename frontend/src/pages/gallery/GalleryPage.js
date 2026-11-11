@@ -16,6 +16,7 @@ import { formatEther, parseEther } from 'ethers';
 import { ARTBLOCK_NFT_ADDRESS } from '../../config';
 import { contractABI } from '../../constants/contractABI';
 import { ensureHardhatNetwork } from '../../utils/network';
+import { getIPFSUrl } from '../../utils/ipfs';
 
 
 // Helper function to check if a string is a valid number
@@ -205,7 +206,8 @@ const SubmitArtworkModal = ({ isOpen, onClose, galleryId }) => {
         ipfsHash: nftToSubmit.ipfsHash,
         price: nftToSubmit.price,
         artistAddress: user.walletAddress,
-        contractAddress: process.env.REACT_APP_ARTBLOCK_CONTRACT_ADDRESS,
+        //contractAddress: process.env.REACT_APP_ARTBLOCK_CONTRACT_ADDRESS,
+        contractAddress: ARTBLOCK_NFT_ADDRESS,
         tokenId: blockchainTokenId,
         blockchainTokenId: blockchainTokenId, // Add explicit blockchain token ID
         metadata: {
@@ -300,7 +302,7 @@ const SubmitArtworkModal = ({ isOpen, onClose, galleryId }) => {
                     >
                       <div className="aspect-square bg-black">
                         <img
-                          src={`https://ipfs.io/ipfs/${nft.ipfsHash}`}
+                          src={getIPFSUrl(nft.ipfsHash)}
                           alt={nft.title}
                           className="w-full h-full object-cover"
                         />
@@ -422,11 +424,11 @@ const ArtworkCard = ({ artwork, onPurchaseComplete }) => {
         platform: formatEther(platformShareWei)
       });
       
-      const contract = new ethers.Contract(
-        process.env.REACT_APP_ARTBLOCK_CONTRACT_ADDRESS,
-        contractABI,
-        signer
-      );
+     const contract = new ethers.Contract(
+  ARTBLOCK_NFT_ADDRESS,
+  contractABI,
+  signer
+);
 
       const tx = await contract.buyArtwork(blockchainTokenId, {
         value: priceInWei
@@ -510,7 +512,7 @@ const ArtworkCard = ({ artwork, onPurchaseComplete }) => {
       {/* Image Container */}
       <div className="aspect-square bg-gray-100 relative overflow-hidden">
         <img
-          src={`https://ipfs.io/ipfs/${artwork.ipfsHash}`}
+          src={getIPFSUrl(artwork.ipfsHash)}
           alt={artwork.title}
           className="w-full h-full object-cover transition-transform 
             duration-300 group-hover:scale-110"

@@ -3,8 +3,8 @@ export const HARDHAT_CHAIN_ID_DECIMAL = 31337;
 
 export const HARDHAT_NETWORK_PARAMS = {
   chainId: HARDHAT_CHAIN_ID_HEX,
-  chainName: 'Hardhat Localhost',
-  rpcUrls: ['http://127.0.0.1:8545'],
+  chainName: 'Anvil Localhost',
+  rpcUrls: ['http://127.0.0.1:8546'],
   nativeCurrency: {
     name: 'ETH',
     symbol: 'ETH',
@@ -56,7 +56,8 @@ export const ensureHardhatNetwork = async () => {
   } catch (error) {
     console.error('Failed to switch to Hardhat network:', error);
     throw new Error(
-      error.message || 'Please switch your MetaMask network to Hardhat Localhost (http://127.0.0.1:8545, Chain ID 31337).'
+      error.message || 'Please switch your MetaMask network to Anvil Localhost (http://127.0.0.1:8546, Chain ID 31337).'
     );
   }
 };
+
